@@ -125,26 +125,16 @@ def print_query_result(sFilter,frmt='%t',date_format='%d-%m-%Y'):
 def start_gui():
     import warnings
     import wx
-    import gui.mainBoard as mainWindow
+    from mvc.controllers import MainController
     if hasattr(wx, 'wxPyDeprecationWarning'):
         warnings.filterwarnings('ignore', category=wx.wxPyDeprecationWarning)
-    #---------------------------------------------------------------------------
-    class MyApp(wx.App):
-        def OnInit(self):
-            self.SetAppName('MALODOS')
-            #if len(sys.argv)>1 and os.path.exists(sys.argv[1]): database.theBase.use_base(sys.argv[1])
-            self.frame = mainWindow.MainFrame(None, 'MALODOS')
-            self.frame.Show(True)
-            self.SetTopWindow(self.frame)
-            #if str_to_bool(database.theConfig.get_param('encryption', 'encryptData','False',True)): get_current_password()
-            #if not database.theBase.buildDB():
-            #    return False
-            return True
-    app = MyApp(False)
-    
+
+    app = wx.App(False)
+    app.SetAppName('MALODOS')
     database.initialize()
-    app.frame.initialize()
-    #if not database.theBase.buildDB(): raise 'Unable to load the database'
+    controller = MainController()
+    controller.initialize()
+    controller.view.show()
     app.MainLoop()
 
 if __name__ == "__main__":
