@@ -20,10 +20,24 @@ try:
     import enchant
 except:
     pass
-import gui.utilities
 from .general import str_to_bool
 from PIL import ImageFilter
 from PIL import ImageOps
+
+
+class _NoOpProgressDialog(object):
+    def add_to_current_step(self, *args, **kwargs):
+        return None
+
+    def new_sub_step(self, *args, **kwargs):
+        return None
+
+    def finish_current_step(self, *args, **kwargs):
+        return None
+
+
+def _get_progress_dialog():
+    return _NoOpProgressDialog()
 #===========================================================================
 # phonex : simplify the word so that phonetic comparison can be made between
 # words not spelled identically
@@ -154,7 +168,7 @@ def ocr_image_file(image_name,usedOCR):
     nbOCR = len(usedOCR)
     if nbOCR==0 : return words_dict
     stateNum=0
-    pd = gui.utilities.getGlobalProgressDialog()
+    pd = _get_progress_dialog()
     
     test_langs = database.theConfig.get_param('OCR', 'languages','').split(',')
     dictList=[]
@@ -214,7 +228,7 @@ def ocr_image(pil_image):
     words_dict={}
     usedOCR = {}
     ocrConf = database.theConfig.get_ocr_configuration()
-    pd = gui.utilities.getGlobalProgressDialog()
+    pd = _get_progress_dialog()
     for s in ocrConf.get_available_ocr_programs() :
         if str_to_bool(database.theConfig.get_param('OCR', 'use'+s,'0')) :
             frm = ocrConf.get_needed_image_format(s)

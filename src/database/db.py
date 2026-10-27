@@ -15,10 +15,10 @@ import sqlite3
 import datetime
 import hashlib
 import string
-import gui.utilities
+import ast
 import os.path
 import configparser
-import algorithms.words
+import algorithms.general
 from database import Resources
 import shutil
 import zipfile
@@ -29,6 +29,47 @@ from os import urandom
 import database
 import Crypto.Cipher.AES as AES
 import bcrypt
+
+
+class _FallbackUtilities(object):
+    @staticmethod
+    def show_message(message):
+        logging.warning(str(message))
+
+    @staticmethod
+    def ask(message):
+        logging.warning(str(message))
+        return False
+
+    @staticmethod
+    def ask_password(message):
+        logging.warning(str(message))
+        return ''
+
+    @staticmethod
+    def multichoice(choices, message):
+        logging.warning(str(message))
+        return 0 if choices else -1
+
+    class MultipleButtonDialog(object):
+        def __init__(self, *args, **kwargs):
+            self.choice = 0
+
+        def ShowModal(self):
+            return 0
+
+
+_ui = _FallbackUtilities()
+
+
+def _phonex(word):
+    try:
+        from algorithms import words as _words
+        return _words.phonex(word)
+    except Exception:
+        return str(word)
+
+
 class ConfigReader(object):
     def __init__(self,conf_file=None):
         self.config = None
@@ -91,7 +132,7 @@ class OCRConfiguration(ConfigReader):
         needed_format = self.get_needed_image_format(ocr_section).lower()
         if os.path.splitext(input_file)[1].lower() != '.'+  needed_format :
             msg = _('Unable to get the image in format %(needed_format) for section %(section) ') % {'needed_format':needed_format,'ocr_section':ocr_section}
-            gui.utilities.show_message(msg)
+            _ui.show_message(msg)
             return []
         pname = self.get_param(ocr_section, 'programName', '', False)
         if pname == '' : return []
@@ -113,7 +154,7 @@ class OCRConfiguration(ConfigReader):
                 s=s[2:]
                 if placeHolder[ps] != '':
                     msg = _('Misformatted OCR configuration for section %s ')% ocr_section
-                    gui.utilities.show_message(msg) 
+                    _ui.show_message(msg) 
                     return ([],None)
                 else:
                     placeHolder[ps] = s
@@ -130,7 +171,7 @@ class OCRConfiguration(ConfigReader):
                     break
             if not_placed :
                 msg = _('Misformatted OCR configuration for section %s ')% ocr_section
-                gui.utilities.show_message(msg) 
+                _ui.show_message(msg) 
                 return ([],None)
         def do_replace(s):
             s = s.replace("$outputFilenameNoExt" , os.path.splitext(output_file)[0])
@@ -322,11 +363,35 @@ class Base(object):
         '''
         if base_name is not None : self.use_base(base_name)
     def utf_or_str(self,s):
+        if s is None:
+            return None
+        if isinstance(s, memoryview):
+            s = s.tobytes()
+        if isinstance(s, bytes):
+            for encoding in ('utf-8', 'utf-8-sig', 'latin-1', 'ascii'):
+                try:
+                    return s.decode(encoding)
+                except UnicodeDecodeError:
+                    continue
+            return s.decode('utf-8', 'replace')
+        if isinstance(s, str):
+            if s.startswith(("b'", 'b"')):
+                try:
+                    parsed = ast.literal_eval(s)
+                    if isinstance(parsed, bytes):
+                        for encoding in ('utf-8', 'utf-8-sig', 'latin-1', 'ascii'):
+                            try:
+                                return parsed.decode(encoding)
+                            except UnicodeDecodeError:
+                                continue
+                        return parsed.decode('utf-8', 'replace')
+                except Exception:
+                    pass
+            return s
         try:
-            d=str(s)
-        except:
-            d=str(s)
-        return d
+            return str(s)
+        except Exception:
+            return s
     def create_and_use(self,base_name,psw=None):
         self.connexion = sqlite3.connect(base_name, detect_types=sqlite3.PARSE_DECLTYPES)
         self.connexion.text_factory = self.utf_or_str
@@ -366,7 +431,7 @@ class Base(object):
         else:
             self.connexion.create_function("IS_IN_DIR", 2, lambda fname,dirname : os.path.samefile(os.path.dirname(fname), dirname))
         self.connexion.create_function("EXTENSION", 1, lambda fname : os.path.splitext(fname)[1])
-        self.connexion.create_function("PHONEX", 1, lambda word : algorithms.words.phonex(word))
+        self.connexion.create_function("PHONEX", 1, lambda word: _phonex(word))
         self.connexion.create_function("MAKE_FULL_PATH", 2, self.make_full_name)
         
         if self.encrypted and self.cypher is not None:
@@ -433,7 +498,7 @@ class Base(object):
             self.connexion.execute(sql_statement)
         except Exception as E:
             logging.debug('SQL ERROR')
-            gui.utilities.show_message('Error during database index creation : ' + str(E))
+            _ui.show_message('Error during database index creation : ' + str(E))
             
         #self.create_table(self.docWords_tableName, 'keyID INTEGER references ' + self.keywords_tableName + '(ROWID) ,docID INTEGER references ' + self.documents_tableName + '(ROWID)')
         self.create_table(self.docWords_tableName, 'keyID INTEGER references {0}(rowID) ,docID INTEGER references {1}(rowID), field INT,count INT default 1'.format(self.keywords_tableName,self.documents_tableName))
@@ -447,7 +512,7 @@ class Base(object):
             db_version = self.DB_VERSION
         db_version = float(db_version)
         if db_version > self.DB_VERSION:
-            gui.utilities.show_message(_('Unstable state: Your database version is newer than the program itself...'))
+            _ui.show_message(_('Unstable state: Your database version is newer than the program itself...'))
             return False
         if db_version<1.1 :
             sql_statement = 'ALTER TABLE %s ADD COUNT INT default 1' % self.docWords_tableName
@@ -455,7 +520,7 @@ class Base(object):
                 self.connexion.execute(sql_statement)
             except Exception as E:
                 logging.debug('SQL ERROR ' + str(E))
-                gui.utilities.show_message('Error during database view creation : ' + str(E))
+                _ui.show_message('Error during database view creation : ' + str(E))
             sql_statement = 'DROP VIEW fullDoc'
             try:
                 self.connexion.execute(sql_statement)
@@ -469,7 +534,7 @@ class Base(object):
         try:
             self.connexion.execute(sql_statement)
         except Exception as E:
-            gui.utilities.show_message('Error during database view creation :' + str(E))
+            _ui.show_message('Error during database view creation :' + str(E))
             logging.debug('SQL ERROR ' + str(E))
             return False
         if db_version<1.21 :
@@ -566,7 +631,7 @@ class Base(object):
                 else:
                     personID = row[0]
             except Exception as E:
-                gui.utilities.show_message(_('Unable to assign the registering person'))
+                _ui.show_message(_('Unable to assign the registering person'))
                 logging.debug('SQL ERROR ' + str(E))
         try:
             # add the document entry in the database
@@ -576,7 +641,7 @@ class Base(object):
             docID = cur.lastrowid
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to add the document'))
+            _ui.show_message(_('Unable to add the document'))
             return False
         self.connexion.commit()
         if keywordsGroups :
@@ -605,7 +670,7 @@ class Base(object):
             else:
                 msg = _('This will delete these ') + str(len(docID)) + _(' records.')
             msg=msg+_('Please, choose an action below')
-            choiceWin = gui.utilities.MultipleButtonDialog(parent,-1,_('What to do'),msg,
+            choiceWin = _ui.MultipleButtonDialog(parent,-1,_('What to do'),msg,
                                                        [_('remove from database'),_('remove from database AND FROM DISK'),_('cancel')])
             choiceWin.ShowModal()
             if choiceWin.choice == 2 :
@@ -645,7 +710,7 @@ class Base(object):
         )'''
         cur = None
         if not keywords : return None
-        keywords =  [algorithms.words.phonex(s) for s in keywords]
+        keywords = [_phonex(s) for s in keywords]
         # first : find the keyword in the keywords table
         if isinstance(keywords,list):
             Q = "SELECT ROWID FROM " + self.keywords_tableName + " WHERE decrypt(soundex_word) IN " + self.make_placeholder_list(len(keywords))
@@ -657,7 +722,7 @@ class Base(object):
             return cur
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to search keywords'))
+            _ui.show_message(_('Unable to search keywords'))
             return None
 
     
@@ -678,7 +743,7 @@ class Base(object):
             return cur
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message('SQL search failed ' + str(E))
+            _ui.show_message('SQL search failed ' + str(E))
             #print E 
             return None
     #===============================================================================
@@ -693,7 +758,7 @@ class Base(object):
             return cur
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message('SQL search failed ' + str(E))
+            _ui.show_message('SQL search failed ' + str(E))
             #print E 
             return None
     #===============================================================================
@@ -714,7 +779,7 @@ class Base(object):
                 return [ row[0] for row in cur]
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message('SQL search failed ' + str(E) )
+            _ui.show_message('SQL search failed ' + str(E) )
             return None
     #===============================================================================
     # find entry starting by a given prefix and for a given field
@@ -727,7 +792,7 @@ class Base(object):
             return [ row[0] for row in cur]
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message('SQL search failed ' + str(E) )
+            _ui.show_message('SQL search failed ' + str(E) )
             return None
     
     #===============================================================================
@@ -760,7 +825,7 @@ class Base(object):
                     cur = self.connexion.execute(Q)
             except Exception as E:
                 logging.debug('SQL ERROR ' + str(E))
-                gui.utilities.show_message(_('Keyword search failed'))
+                _ui.show_message(_('Keyword search failed'))
                 return None
             # cur now contain the docID to take
             if cur:
@@ -770,7 +835,7 @@ class Base(object):
             cur = self.connexion.execute(sql_statement)
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Document search failed'))
+            _ui.show_message(_('Document search failed'))
             return None
         return cur
     #===========================================================================
@@ -810,7 +875,7 @@ class Base(object):
             already_present = [ i[0] for i in cur]
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Keyword search failed'))
+            _ui.show_message(_('Keyword search failed'))
             already_present = [ ]
         absents = [ s for s in keywords if s not in already_present]
         return list(set(absents))
@@ -825,7 +890,7 @@ class Base(object):
             self.connexion.execute(Q,docID)
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to remove documents/word associations'))
+            _ui.show_message(_('Unable to remove documents/word associations'))
             return
         # second find and delete all the corresponding lines in folders index
         Q = 'DELETE FROM ' + self.folderDoc_tableName + ' WHERE docID IN ' + self.make_placeholder_list(len(docID))
@@ -833,7 +898,7 @@ class Base(object):
             self.connexion.execute(Q,docID)
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to remove documents/word associations'))
+            _ui.show_message(_('Unable to remove documents/word associations'))
             return
         # then delete the documents entries themselves
         Q = 'DELETE FROM ' + self.documents_tableName + ' WHERE ROWID IN ' + self.make_placeholder_list(len(docID))
@@ -842,7 +907,7 @@ class Base(object):
             self.connexion.commit()
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to remove documents entries'))
+            _ui.show_message(_('Unable to remove documents entries'))
             return
     #===========================================================================
     # update_keywords_for : remove all the keyword reference to docID
@@ -864,7 +929,7 @@ class Base(object):
             self.connexion.execute(Q,docID)
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to remove doc/word association'))
+            _ui.show_message(_('Unable to remove doc/word association'))
             return False
         for iField in range(len(keywordsGroups)) :
             keyGroup = keywordsGroups[iField]
@@ -875,14 +940,14 @@ class Base(object):
             elif type(keyGroup[1]) is dict:
                 all_keywords = dict([ (item.lower(),weight) for item,weight in list(keyGroup[1].items()) ])
             absents = self.find_absent_keywords(list(all_keywords.keys()))
-            absents = [(self.encrypt(x),self.encrypt(algorithms.words.phonex(x))) for x in absents]
+            absents = [(self.encrypt(x), self.encrypt(_phonex(x))) for x in absents]
             if len(absents)>0 :
                 Q = 'INSERT INTO ' + self.keywords_tableName + ' (keyword,soundex_word) VALUES (?,?)'
                 try:
                     self.connexion.executemany(Q,absents)
                 except  Exception as E:
                     logging.debug('SQL ERROR ' + str(E))
-                    gui.utilities.show_message(_('Unable to insert new keywords : ') + str(E))
+                    _ui.show_message(_('Unable to insert new keywords : ') + str(E))
                     return False
             # get back all the keyword IDs for the current field
             Q = 'SELECT ROWID,decrypt(KEYWORD) FROM ' + self.keywords_tableName + ' WHERE decrypt(keyword) IN ' + self.make_placeholder_list(len(all_keywords))
@@ -892,7 +957,7 @@ class Base(object):
                 addedKeys = [ (row[0],all_keywords[row[1].lower()]) for row in cur]
             except Exception as E:
                 logging.debug('SQL ERROR ' + str(E))
-                gui.utilities.show_message(_('Unable to search for keywords'))
+                _ui.show_message(_('Unable to search for keywords'))
                 return False
             # add the new keyID to the table
             for adoc_i in docID:
@@ -903,7 +968,7 @@ class Base(object):
                     self.connexion.executemany(Q , addedKeys)
                 except Exception as E:
                     logging.debug('SQL ERROR ' + str(E))
-                    gui.utilities.show_message(_('Unable to insert new document/word association'))
+                    _ui.show_message(_('Unable to insert new document/word association'))
                     return False
             try:
                 self.connexion.commit()
@@ -922,7 +987,7 @@ class Base(object):
             self.connexion.commit()
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to update document into database'))
+            _ui.show_message(_('Unable to update document into database'))
             return False
         keywordsGroups = self.get_keywordsGroups_from(title, description, filename,tags,fullText)
         if not self.update_keywords_for(docID,keywordsGroups) : return False
@@ -937,7 +1002,7 @@ class Base(object):
             self.connexion.commit()
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to reassign checksum into database entry'))
+            _ui.show_message(_('Unable to reassign checksum into database entry'))
             return False
         return True
     #===========================================================================
@@ -977,7 +1042,7 @@ class Base(object):
             return cur
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            #gui.utilities.show_message('Unable to get file list from database')
+            #_ui.show_message('Unable to get file list from database')
             return None
     #===========================================================================
     # get_all_keywords : retrieve all the recorded keywords
@@ -1065,7 +1130,7 @@ class Base(object):
         foldList = [row[0] for row in foldList]
         if not recursiveRemove and (len(docList)+len(foldList)>0):
             actionList=[_('Remove content') , _('Set to parent folder'),_('cancel')]
-            action = gui.utilities.multichoice(actionList, _('This folder is not empty, please choose the action to take'))
+            action = _ui.multichoice(actionList, _('This folder is not empty, please choose the action to take'))
             if action==0 : recursiveRemove=True
             if action==1 :
                 parentID = self.folders_genealogy_of(ID, False, 2)
@@ -1405,7 +1470,7 @@ class Base(object):
             return True
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to create the database {name} : {err}'.format(name=new_base_name,err=str(E))))
+            _ui.show_message(_('Unable to create the database {name} : {err}'.format(name=new_base_name,err=str(E))))
             return False
         
     def export_database(self,filename,rows):
@@ -1439,7 +1504,7 @@ class Base(object):
             self.set_directory(dirname)
         except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
-            gui.utilities.show_message(_('Unable to open the archive {0}'.format(filename)))
+            _ui.show_message(_('Unable to open the archive {0}'.format(filename)))
     def make_full_name(self,fname,dirname):
         if os.path.isabs(fname) :
             return fname

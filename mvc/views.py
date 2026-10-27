@@ -1,3 +1,3 @@
-from src.mvc.views import MainView
+from src.mvc.views import *
 
-__all__ = ["MainView"]
+__all__ = [name for name in globals() if not name.startswith('_')]

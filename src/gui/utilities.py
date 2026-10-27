@@ -1,114 +1,207 @@
-'''
-Created on 21 juin 2010. Copyright 2010, David GUEZ
-@author: david guez (guezdav@gmail.com)
-This file is a part of the source code of the MALODOS project.
-You can use and distribute it freely, but have to conform to the license
-attached to this project (LICENSE.txt file)
-=====================================================================
-'''
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-import wx
+"""Qt-based utility helpers (wx-free compatibility layer).
 
-def multichoice(choices, message=_('choose in the following :') ):
-    return wx.GetSingleChoiceIndex(message,_('selection'),choices)
-def show_message(message):
-    return wx.MessageBox(message,_('alert'))
-def ask(message):
-    dlg =  wx.MessageDialog(None,message,_('Question'),wx.YES_NO)
-    return dlg.ShowModal()==wx.ID_YES
-def ask_string(message,caption=_('String expected'),defaultValue=''):
-    return wx.GetTextFromUser(message,caption,defaultValue)
-def ask_password(message,caption=_('Enter password'),defaultValue=''):
-    return wx.GetPasswordFromUser(message,caption,defaultValue)
-def ask_folder(msg='Choose a folder'):
-    dlg = wx.DirDialog(parent=wx.GetActiveWindow(),message=msg)
-    dlg.ShowModal()
-    return dlg.GetPath()
+This module keeps the historical API shape used by legacy callers while
+implementing it with PySide6 so importing it never pulls wx.
+"""
 
-class MultipleButtonDialog(wx.Dialog):
-    choice=None
-    def __init__(self,parent,idt=-1,title=_("choice window"),caption=_("Choose an option"),actionList=[_('ok'),_('cancel')]):
-        self.btMsg=[]
-        wx.Dialog.__init__(self,parent,idt,title)
-        self.panel = wx.Panel(self, -1)
-        self.totSizer = wx.BoxSizer(wx.VERTICAL)
-        self.horSizer = wx.BoxSizer(wx.HORIZONTAL)
-        
-        self.lbText = wx.StaticText(self.panel,-1,caption)
-        self.totSizer.Add(self.lbText,1,wx.EXPAND)
-        
-        for i in range(len(actionList)) :
-            self.btMsg.append(wx.Button(self.panel,i,actionList[i]))
-            self.horSizer.Add(self.btMsg[i],1,wx.EXPAND)
-            self.Bind(wx.EVT_BUTTON, self.actionReturn, self.btMsg[i])
-        self.totSizer.Add(self.horSizer,0)
-        self.panel.SetSizerAndFit(self.totSizer)
-        self.totSizer.Fit(self)
-    def actionReturn(self,event):
-        self.choice =  event.GetId()
-        self.Close()
-        
+from __future__ import annotations
+
+from typing import Any, Optional, Sequence
+
+from PySide6.QtCore import QCoreApplication, QEventLoop
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QProgressDialog,
+    QVBoxLayout,
+    QWidget,
+)
+
+
+NO_VALUE = "?"
+
+
+def _app() -> QApplication:
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    return app
+
+
+def _parent_window(parent: Optional[QWidget] = None) -> Optional[QWidget]:
+    if parent is not None:
+        return parent
+    app = QApplication.instance()
+    if app is None:
+        return None
+    win = app.activeWindow()
+    if win is not None:
+        return win
+    wins = app.topLevelWidgets()
+    return wins[0] if wins else None
+
+
+def show_message(message: str = "", caption: str = "", style: Any = None) -> None:
+    del style
+    _app()
+    QMessageBox.information(_parent_window(), caption or "Malodos", message)
+
+
+def ask(message: str = "", caption: str = "", default_answer: bool = True) -> bool:
+    _app()
+    buttons = QMessageBox.Yes | QMessageBox.No
+    default_btn = QMessageBox.Yes if default_answer else QMessageBox.No
+    answer = QMessageBox.question(
+        _parent_window(),
+        caption or "Malodos",
+        message,
+        buttons,
+        default_btn,
+    )
+    return answer == QMessageBox.Yes
+
+
+class MultipleButtonDialog(QDialog):
+    def __init__(
+        self,
+        parent: Optional[QWidget],
+        message: str,
+        choices: Sequence[str],
+    ) -> None:
+        super().__init__(parent)
+        self.SetValue = self.set_value
+        self._choice: int = -1
+        self.setWindowTitle("Malodos")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(message, self))
+
+        button_box = QDialogButtonBox(self)
+        for idx, label in enumerate(choices):
+            btn = QPushButton(label, self)
+            btn.clicked.connect(lambda _checked=False, i=idx: self.set_value(i))
+            button_box.addButton(btn, QDialogButtonBox.ActionRole)
+        layout.addWidget(button_box)
+
+    def set_value(self, value: int) -> None:
+        self._choice = value
+        self.accept()
+
+    @property
+    def answer(self) -> int:
+        return self._choice
+
+
+class _PasswordDialog(QDialog):
+    def __init__(
+        self,
+        parent: Optional[QWidget],
+        title: str,
+        text: str,
+        default: str,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title or "Password")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(text, self))
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Password:", self))
+        self._line = QLineEdit(self)
+        self._line.setEchoMode(QLineEdit.Password)
+        self._line.setText(default or "")
+        row.addWidget(self._line)
+        layout.addLayout(row)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def password(self) -> str:
+        return self._line.text()
+
+
+def ask_password(message: str = "", default_answer: str = "") -> str:
+    _app()
+    dialog = _PasswordDialog(_parent_window(), "Password", message, default_answer)
+    return dialog.password() if dialog.exec() == QDialog.Accepted else ""
+
+
+def multichoice(
+    choices: Sequence[str] | str,
+    message: str = "Choose",
+    caption: str = "Choose",
+) -> int:
+    del caption
+    _app()
+    if isinstance(choices, str):
+        normalized = [c for c in choices.split("|") if c]
+    else:
+        normalized = list(choices)
+    if not normalized:
+        return -1
+
+    dialog = MultipleButtonDialog(_parent_window(), message, normalized)
+    return dialog.answer if dialog.exec() == QDialog.Accepted else -1
+
+
 class ProgressDialog:
-    def __init__(self,title='Progression',message=None):
-        self.NMAX=100000
-        self.stepSize=[1.0]
-        self.donePerStep=[0.0]
-        self.pd = wx.ProgressDialog(title,message='',maximum=self.NMAX,style=wx.PD_APP_MODAL | wx.PD_ELAPSED_TIME)
-        if not message is None : self.pd.Update(1,message)
-    def new_sub_step(self,stepSize,newMessage=None):
-        self.stepSize.append(stepSize)
-        self.donePerStep.append(0.0)
-        if newMessage is not None :
-            progression = round(self.calculate_total_done() * (self.NMAX-1))
-            if progression>=self.NMAX : progression=self.NMAX-1
-            self.pd.Update(progression,newMessage)
-    def finish_current_step(self):
-        v=self.stepSize.pop()
-        self.donePerStep.pop()
-        self.donePerStep[-1] += v
-    def calculate_total_done(self):
-        total=0.0
-        s=1.0
-        for i in range(len(self.stepSize)) :
-            #print '(i=%d , s=%g , t=%g)' % (i,s,total)
-            s *= self.stepSize[i]
-            total += self.donePerStep[i]*s
-        return total
-    def set_current_step_to(self,stepProgression,message=None):
-        self.donePerStep[-1] = stepProgression
-        if self.donePerStep[-1]>=1 : self.donePerStep[-1]=1.0
-        progression = round(self.calculate_total_done() * (self.NMAX-1))
-#        print self.stepSize
-#        print self.donePerStep
-#        print self.calculate_total_done()
-#        print '*'*10
-        if progression>=self.NMAX : progression=self.NMAX-1
-        if message is None:
-            self.pd.Update(progression)
-        else:
-            self.pd.Update(progression,message)
-    def add_to_current_step(self,stepIncrement,message=None):
-        self.set_current_step_to(self.donePerStep[-1] + stepIncrement, message)
-    def clear(self):
-        self.stepSize=[1.0]
-        self.donePerStep=[0.0]        
-    def destroy(self):
-        self.pd.Destroy()
+    def __init__(self, title: str = "") -> None:
+        self._dialog: Optional[QProgressDialog] = None
+        self._maximum = 100
+        self._value = 0
+        self._last_message = title or ""
 
-gProgressDialog = None
+    def new_sub_step(self, step_size: int, new_message: str = "") -> "ProgressDialog":
+        del step_size
+        if new_message:
+            self._last_message = new_message
+        return self
 
-def getGlobalProgressDialog(title='Progression',message=None):
-    global gProgressDialog
-    if gProgressDialog is None :
-        try:
-            gProgressDialog = ProgressDialog(title,message)
-        except:
-            gProgressDialog = None
-    if gProgressDialog is None:
-        raise RuntimeError("Unable to create progress dialog")
-    return gProgressDialog
-def closeGlobalProgressDialog():
-    global gProgressDialog
-    if gProgressDialog is not None :
-        gProgressDialog.destroy()
-        gProgressDialog = None
+    def add_to_current_step(self, step_progress: int) -> None:
+        self._value = min(self._maximum, self._value + int(step_progress))
+        if self._dialog is not None:
+            self._dialog.setValue(self._value)
+            if self._last_message:
+                self._dialog.setLabelText(self._last_message)
+            QCoreApplication.processEvents(QEventLoop.AllEvents)
+
+    def finish_current_step(self) -> None:
+        if self._dialog is not None:
+            self._dialog.setValue(self._maximum)
+            QCoreApplication.processEvents(QEventLoop.AllEvents)
+
+    def destroy(self) -> None:
+        if self._dialog is not None:
+            self._dialog.close()
+            self._dialog.deleteLater()
+            self._dialog = None
+
+    def show(self) -> None:
+        _app()
+        self._dialog = QProgressDialog(self._last_message or "Working...", "", 0, self._maximum, _parent_window())
+        self._dialog.setWindowTitle("Malodos")
+        self._dialog.setMinimumDuration(0)
+        self._dialog.setAutoClose(False)
+        self._dialog.setAutoReset(False)
+        self._dialog.setCancelButton(None)
+        self._dialog.setValue(self._value)
+        self._dialog.show()
+        QCoreApplication.processEvents(QEventLoop.AllEvents)
+
+
+def getGlobalProgressDialog(title: str) -> ProgressDialog:
+    pd = ProgressDialog(title)
+    pd.show()
+    return pd

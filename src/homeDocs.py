@@ -21,9 +21,44 @@ import os
 import locale
 import sys
 import logging
-import algorithms
 import getopt
 import datetime
+
+
+def _real_path(path):
+    if not path:
+        return ''
+    return os.path.realpath(os.path.abspath(path))
+
+
+_src_root = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(_src_root)
+
+seen = set()
+filtered = []
+for entry in sys.path:
+    if entry == '':
+        filtered.append(entry)
+        continue
+    real = _real_path(entry)
+    if real in seen:
+        continue
+    seen.add(real)
+    filtered.append(entry)
+sys.path[:] = filtered
+
+for candidate in (_src_root, _project_root):
+    real = _real_path(candidate)
+    if any(_real_path(entry) == real for entry in sys.path):
+        continue
+    sys.path.insert(0, real)
+
+if _src_root not in sys.path:
+    sys.path.insert(0, _src_root)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+import algorithms
 __version__ = '1.3.1'
 
 
@@ -123,19 +158,23 @@ def print_query_result(sFilter,frmt='%t',date_format='%d-%m-%Y'):
         print(s)
 
 def start_gui():
-    import warnings
-    import wx
-    from mvc.controllers import MainController
-    if hasattr(wx, 'wxPyDeprecationWarning'):
-        warnings.filterwarnings('ignore', category=wx.wxPyDeprecationWarning)
-
-    app = wx.App(False)
-    app.SetAppName('MALODOS')
-    database.initialize()
-    controller = MainController()
-    controller.initialize()
-    controller.view.show()
-    app.MainLoop()
+    from src.mvc.app import MALODOSApp
+    app = MALODOSApp([])
+    auto_quit_ms = os.environ.get('MALODOS_AUTOTEST_EXIT_MS')
+    if auto_quit_ms:
+        try:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(int(auto_quit_ms), app.quit)
+        except Exception:
+            pass
+    exit_code = app.exec()
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    # Work around a native PySide6 teardown crash happening after app.exec() returns.
+    os._exit(int(exit_code) if exit_code is not None else 0)
 
 if __name__ == "__main__":
     logfilename=os.path.join(database.theConfig.conf_dir ,'messages.log')

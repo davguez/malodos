@@ -1,12 +1,22 @@
 """MVC layer for MALODOS.
 
-This package groups the application state (model), the rendering surface
-(view) and the interaction flow (controller) without changing the underlying
-GUI implementation.
+This package intentionally avoids eager GUI imports to keep side effects low.
 """
 
-from .models import DocumentModel
-from .views import MainView
-from .controllers import MainController
+__all__ = ["DocumentModel", "MainView", "MainController", "MALODOSApp"]
 
-__all__ = ["DocumentModel", "MainView", "MainController"]
+
+def __getattr__(name):
+    if name == "DocumentModel":
+        from .models import DocumentModel
+        return DocumentModel
+    if name == "MainView":
+        from .views import MainView
+        return MainView
+    if name == "MainController":
+        from .controllers import MainController
+        return MainController
+    if name == "MALODOSApp":
+        from .app import MALODOSApp
+        return MALODOSApp
+    raise AttributeError(name)

@@ -8,9 +8,33 @@ attached to this project (LICENSE.txt file)
 '''
 from . import db
 import logging
-import gui.utilities
 import Crypto.Hash.MD5 as md5
 import bcrypt
+
+try:
+    _
+except NameError:
+    def _(text):
+        return text
+
+
+class _FallbackUtilities(object):
+    @staticmethod
+    def show_message(message):
+        logging.warning(str(message))
+
+    @staticmethod
+    def ask(message):
+        logging.warning(str(message))
+        return False
+
+    @staticmethod
+    def ask_password(message):
+        logging.warning(str(message))
+        return ''
+
+
+_ui = _FallbackUtilities()
 
 currentPassword=''
 def set_current_password(pss):
@@ -49,7 +73,7 @@ def get_password(msg=_('Please gives your password for data encryption/decryptio
         def the_checker(pss):
             b = bcrypt.hashpw(pss, salt)
             if b != hashed:
-                cont = gui.utilities.ask(_('The password does not corresponds to the registered one, do you want to give it back ?..'))
+                cont = _ui.ask(_('The password does not corresponds to the registered one, do you want to give it back ?..'))
             else:
                 cont=False
             return cont
@@ -57,11 +81,11 @@ def get_password(msg=_('Please gives your password for data encryption/decryptio
 
     cont = True
     while cont:
-        password = gui.utilities.ask_password(msg)
+        password = _ui.ask_password(msg)
         if len(password)==0:
             cont=False
         elif len(password)<4:
-            gui.utilities.show_message(_('The password length must be at least 4  char long (at least 8 is recommended). Please gives another one..'))
+            _ui.show_message(_('The password length must be at least 4  char long (at least 8 is recommended). Please gives another one..'))
         else:
             password=transform_password(password)
             if callable(checker) :
