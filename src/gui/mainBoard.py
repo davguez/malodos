@@ -8,6 +8,7 @@ attached to this project (LICENSE.txt file)
 GUI frame of the main application board
 '''
 import wx
+import ast
 from . import addFileWindow
 from . import RecordWidget
 from . import docWindow
@@ -456,6 +457,22 @@ class MainFrame(wx.Frame):
     
     modified=False
     basket=[]
+
+    @staticmethod
+    def _normalize_filename(value):
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            return value.decode('utf-8', 'replace')
+        if isinstance(value, str) and value.startswith(("b'", 'b\"')):
+            try:
+                parsed = ast.literal_eval(value)
+                if isinstance(parsed, bytes):
+                    return parsed.decode('utf-8', 'replace')
+            except Exception:
+                pass
+        return value
+
     #===========================================================================
     # constructor (GUI building)
     #===========================================================================
@@ -735,21 +752,22 @@ class MainFrame(wx.Frame):
         if len(row)!=1  or row[0] is None: return
         row=row[0]
         docID = row[database.theBase.IDX_ROWID]
-        filename = row[database.theBase.IDX_FILENAME]
+        filename = self._normalize_filename(row[database.theBase.IDX_FILENAME])
         title = row[database.theBase.IDX_TITLE]
         description = row[database.theBase.IDX_DESCRIPTION]
         documentDate = row[database.theBase.IDX_DOCUMENT_DATE]
         tags = row[database.theBase.IDX_TAGS]
         folderID_list = database.theBase.folders_list_for(docID)
-        try:
-            file_md5 = hashlib.md5(open(row[database.theBase.IDX_FILENAME], "rb").read()).hexdigest()
-            if row[database.theBase.IDX_CHECKSUM] !=  file_md5:
-                if utilities.ask(_('The file content has changed! Do you wish to update its signature ?')):
-                    if not database.theBase.update_doc_signature(docID, file_md5):
-                        wx.MessageBox(_('Unable to update the database'))
-        except Exception as E:
-            utilities.show_message(_('Unable to check the file signature...'))
-            logging.exception('Error checking MD5 signature ->' + str(E))
+        if filename and os.path.exists(filename):
+            try:
+                file_md5 = hashlib.md5(open(filename, "rb").read()).hexdigest()
+                if row[database.theBase.IDX_CHECKSUM] !=  file_md5:
+                    if utilities.ask(_('The file content has changed! Do you wish to update its signature ?')):
+                        if not database.theBase.update_doc_signature(docID, file_md5):
+                            wx.MessageBox(_('Unable to update the database'))
+            except Exception as E:
+                utilities.show_message(_('Unable to check the file signature...'))
+                logging.exception('Error checking MD5 signature ->' + str(E))
         self.recordPart.SetFields(filename, title, description, documentDate,tags,False,folderID_list)
         #print row
         try:
@@ -768,7 +786,9 @@ class MainFrame(wx.Frame):
         row = self.recordPart.getRow()
         if row is None or len(row)!=1 or row[0] is None: return
         row=row[0]
-        filename = row[database.theBase.IDX_FILENAME]
+        filename = self._normalize_filename(row[database.theBase.IDX_FILENAME])
+        if not filename:
+            return
         if os.name == 'posix' :
             subprocess.Popen(['xdg-open', filename])
         else:
@@ -788,7 +808,7 @@ class MainFrame(wx.Frame):
             self.modified=False
         if theData.is_modified :
             if utilities.ask(_('The image itself has changed, do you want to save the modified image ?')):
-                filename = row[database.theBase.IDX_FILENAME]
+                filename = self._normalize_filename(row[database.theBase.IDX_FILENAME])
                 title = row[database.theBase.IDX_TITLE]
                 description = row[database.theBase.IDX_DESCRIPTION]
                 keywords = database.theBase.get_list_of_tags_for(docID)

@@ -123,8 +123,11 @@ def print_query_result(sFilter,frmt='%t',date_format='%d-%m-%Y'):
         print(s)
 
 def start_gui():
+    import warnings
     import wx
     import gui.mainBoard as mainWindow
+    if hasattr(wx, 'wxPyDeprecationWarning'):
+        warnings.filterwarnings('ignore', category=wx.wxPyDeprecationWarning)
     #---------------------------------------------------------------------------
     class MyApp(wx.App):
         def OnInit(self):
