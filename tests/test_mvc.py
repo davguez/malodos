@@ -416,6 +416,50 @@ class MvcArchitectureTest(unittest.TestCase):
         self.assertEqual(frame.controller.calls, [['/tmp/a.pdf', '/tmp/b.pdf']])
         self.assertIn('2 file(s) imported', frame._status.text())
 
+    def test_add_file_action_uses_metadata_entries_when_supported(self):
+        import mvc.views as views_module
+        from mvc.views import MainView
+
+        class _ControllerStub(object):
+            def __init__(self):
+                self.calls = []
+
+            def add_file_entries(self, entries):
+                self.calls.append(entries)
+                return len(entries)
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+        frame.controller = _ControllerStub()
+
+        original_dialog = views_module.QFileDialog
+        original_collect = frame._collect_metadata_entries
+
+        class _FakeDialog(object):
+            @staticmethod
+            def getOpenFileNames(*_args, **_kwargs):
+                return (['/tmp/a.pdf', '/tmp/b.pdf'], '')
+
+        def _fake_collect(file_names, _title):
+            return [
+                {'path': file_names[0], 'title': 'A', 'description': 'desc a', 'tags': 'x,y', 'document_date': ''},
+                {'path': file_names[1], 'title': 'B', 'description': 'desc b', 'tags': 'z', 'document_date': '2026-10-28'},
+            ]
+
+        views_module.QFileDialog = _FakeDialog
+        frame._collect_metadata_entries = _fake_collect
+        try:
+            frame.action_add_file()
+        finally:
+            views_module.QFileDialog = original_dialog
+            frame._collect_metadata_entries = original_collect
+
+        self.assertEqual(len(frame.controller.calls), 1)
+        self.assertEqual(frame.controller.calls[0][0]['title'], 'A')
+        self.assertEqual(frame.controller.calls[0][1]['document_date'], '2026-10-28')
+        self.assertIn('2 file(s) imported', frame._status.text())
+
     def test_add_scan_action_uses_file_dialog_and_controller(self):
         import mvc.views as views_module
         from mvc.views import MainView
@@ -433,21 +477,52 @@ class MvcArchitectureTest(unittest.TestCase):
         frame = view.frame
         frame.controller = _ControllerStub()
 
-        original_dialog = views_module.QFileDialog
+        original_acquire = frame._acquire_scan_files
 
-        class _FakeDialog(object):
-            @staticmethod
-            def getOpenFileNames(*_args, **_kwargs):
-                return (['/tmp/scan1.png', '/tmp/scan2.png'], '')
+        def _fake_acquire():
+            return ['/tmp/scan1.png', '/tmp/scan2.png']
 
-        views_module.QFileDialog = _FakeDialog
+        frame._acquire_scan_files = _fake_acquire
         try:
             frame.action_add_scan()
         finally:
-            views_module.QFileDialog = original_dialog
+            frame._acquire_scan_files = original_acquire
 
         self.assertEqual(frame.controller.calls, [['/tmp/scan1.png', '/tmp/scan2.png']])
         self.assertIn('2 file(s) imported', frame._status.text())
+
+    def test_add_scan_action_uses_metadata_entries_when_supported(self):
+        from mvc.views import MainView
+
+        class _ControllerStub(object):
+            def __init__(self):
+                self.calls = []
+
+            def add_file_entries(self, entries):
+                self.calls.append(entries)
+                return len(entries)
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+        frame.controller = _ControllerStub()
+
+        original_acquire = frame._acquire_scan_files
+        original_collect = frame._collect_metadata_entries
+
+        frame._acquire_scan_files = lambda: ['/tmp/scanA.png']
+        frame._collect_metadata_entries = lambda file_names, _title: [
+            {'path': file_names[0], 'title': 'Scanned A', 'description': '', 'tags': 'scan', 'document_date': ''}
+        ]
+        try:
+            frame.action_add_scan()
+        finally:
+            frame._acquire_scan_files = original_acquire
+            frame._collect_metadata_entries = original_collect
+
+        self.assertEqual(len(frame.controller.calls), 1)
+        self.assertEqual(frame.controller.calls[0][0]['title'], 'Scanned A')
+        self.assertIn('1 file(s) imported', frame._status.text())
 
     def test_doc_to_go_action_uses_save_dialog_and_controller(self):
         import mvc.views as views_module

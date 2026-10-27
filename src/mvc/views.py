@@ -1,6 +1,8 @@
 import ast
+import contextlib
 import configparser
 import os
+import tempfile
 import webbrowser
 from urllib.parse import quote
 
@@ -33,13 +35,42 @@ def _to_text(value):
         return value
     return str(value)
 
+
+@contextlib.contextmanager
+def _suppress_native_output():
+    """Temporarily silence low-level stdout/stderr writes from scanner backends."""
+    null_fd = None
+    old_stdout = None
+    old_stderr = None
+    try:
+        null_fd = os.open(os.devnull, os.O_WRONLY)
+        old_stdout = os.dup(1)
+        old_stderr = os.dup(2)
+        os.dup2(null_fd, 1)
+        os.dup2(null_fd, 2)
+        yield
+    finally:
+        try:
+            if old_stdout is not None:
+                os.dup2(old_stdout, 1)
+            if old_stderr is not None:
+                os.dup2(old_stderr, 2)
+        finally:
+            for fd in (old_stdout, old_stderr, null_fd):
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except Exception:
+                        pass
+
 try:
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QAction, QIcon, QImage, QPixmap, QTextDocument
+    from PySide6.QtGui import QAction, QIcon, QImage, QPainter, QPixmap, QTextDocument
     from PySide6.QtPrintSupport import QPrintDialog, QPrinter
     from PySide6.QtWidgets import (
         QAbstractItemView,
         QApplication,
+        QComboBox,
         QCheckBox,
         QDialog,
         QDialogButtonBox,
@@ -71,7 +102,7 @@ except ImportError:  # pragma: no cover - optional in non-GUI test runs
     QScrollArea = QSplitter = QSizePolicy = QTabWidget = QTreeWidget = QTreeWidgetItem = QAbstractItemView = None
     QFileDialog = None
     QInputDialog = QMessageBox = None
-    QDialog = QDialogButtonBox = QFormLayout = QTextEdit = QCheckBox = None
+    QDialog = QDialogButtonBox = QFormLayout = QTextEdit = QCheckBox = QComboBox = None
     QPrinter = QPrintDialog = QTextDocument = None
     QPixmap = None
     QIcon = None
@@ -380,10 +411,18 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         )
         if not file_names:
             return
+        add_entries_method = getattr(self.controller, 'add_file_entries', None)
+        if callable(add_entries_method):
+            entries = self._collect_metadata_entries(file_names, 'Add document metadata')
+            if not entries:
+                return
+            added_count = add_entries_method(entries)
+            self._status.setText('%d file(s) imported' % self._safe_int(added_count))
+            return
         add_file_method = getattr(self.controller, 'add_file', None)
         if callable(add_file_method):
             added_count = add_file_method(file_names)
-            self._status.setText('%d file(s) imported' % int(added_count or 0))
+            self._status.setText('%d file(s) imported' % self._safe_int(added_count))
         else:
             self._dispatch_controller_action('actionAddFile', 'add_file')
 
@@ -391,23 +430,51 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         if QFileDialog is None:
             self._dispatch_controller_action('actionAddScan', 'add_scan')
             return
-        file_names, _selected_filter = QFileDialog.getOpenFileNames(
-            self,
-            'Select scanned file(s)',
-            '',
-            'All files (*.*)',
-        )
+        file_names = self._acquire_scan_files()
         if not file_names:
+            return
+        add_entries_method = getattr(self.controller, 'add_file_entries', None)
+        if callable(add_entries_method):
+            entries = self._collect_metadata_entries(file_names, 'Scanned document metadata')
+            if not entries:
+                return
+            added_count = add_entries_method(entries)
+            self._status.setText('%d file(s) imported' % self._safe_int(added_count))
             return
         add_scan_method = getattr(self.controller, 'add_scan', None)
         if callable(add_scan_method):
             added_count = add_scan_method(file_names)
-            self._status.setText('%d file(s) imported' % int(added_count or 0))
+            self._status.setText('%d file(s) imported' % self._safe_int(added_count))
         else:
             self._dispatch_controller_action('actionAddScan', 'add_scan')
 
     def action_remove_selection(self):
-        self._dispatch_controller_action('actionRemoveRecord', 'remove_selection')
+        rows = self.get_selected_rows()
+        if not rows:
+            return
+        remover = getattr(self.controller, 'remove_documents_with_mode', None)
+        if not callable(remover):
+            self._dispatch_controller_action('actionRemoveRecord', 'remove_selection')
+            return
+        if QMessageBox is None:
+            remover(rows, 2)
+            return
+
+        message = 'This will delete %d selected record(s). Choose an action.' % len(rows)
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle('Remove selection')
+        dialog.setText(message)
+        db_btn = dialog.addButton('Remove from database', QMessageBox.ButtonRole.AcceptRole)
+        both_btn = dialog.addButton('Remove from database and disk', QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = dialog.addButton('Cancel', QMessageBox.ButtonRole.RejectRole)
+        dialog.exec()
+
+        clicked = dialog.clickedButton()
+        if clicked is cancel_btn:
+            return
+        delete_mode = 2 if clicked is db_btn else 3
+        removed = remover(rows, delete_mode)
+        self._status.setText('%d record(s) removed' % self._safe_int(removed))
 
     def action_print_document(self):
         if not self.docList:
@@ -429,9 +496,24 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
             return
 
         document = QTextDocument()
-        details = self._document_details(selected).replace('\n', '<br>')
-        document.setHtml('<h2>MALODOS</h2><p>%s</p>' % details)
-        document.print(printer)
+        filename = self._document_filename(selected)
+        pixmap = self._document_pixmap(filename)
+        if pixmap is not None and not pixmap.isNull():
+            painter = QPainter(printer)
+            try:
+                rect = painter.viewport()
+                scaled = pixmap.scaled(
+                    rect.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                painter.drawPixmap(0, 0, scaled)
+            finally:
+                painter.end()
+        else:
+            details = self._document_details(selected).replace('\n', '<br>')
+            document.setHtml('<h2>MALODOS</h2><p>%s</p>' % details)
+            document.print_(printer)
         self._status.setText('Document sent to printer')
 
     def action_basket(self):
@@ -471,36 +553,393 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         if QFileDialog is None:
             self._dispatch_controller_action('actionDocToGo', 'doc_to_go')
             return
-        rows = self.get_selected_rows()
-        if not rows:
-            rows = list(self.docList)
-        if not rows:
-            self._status.setText('No document available for export')
+
+        legacy_exporter = getattr(self.controller, 'doc_to_go', None)
+        do_action = getattr(self.controller, 'doc_to_go_action', None)
+
+        # Compatibility path used by lightweight controller stubs and older call sites.
+        if callable(legacy_exporter) and not callable(do_action):
+            rows = self.get_selected_rows()
+            if not rows:
+                rows = list(self.docList)
+            if not rows:
+                self._status.setText('No document available for export')
+                return
+            zip_path, _selected_filter = QFileDialog.getSaveFileName(
+                self,
+                'Export documents',
+                'documents.zip',
+                'Zip archives (*.zip)',
+            )
+            if not zip_path:
+                return
+            if not zip_path.lower().endswith('.zip'):
+                zip_path += '.zip'
+            added = legacy_exporter(rows, zip_path)
+            self._status.setText('%d file(s) exported to %s' % (self._safe_int(added), zip_path))
             return
-        zip_path, _selected_filter = QFileDialog.getSaveFileName(
-            self,
-            'Export documents',
-            'documents.zip',
-            'Zip archives (*.zip)',
-        )
-        if not zip_path:
-            return
-        if not zip_path.lower().endswith('.zip'):
-            zip_path += '.zip'
-        exporter = getattr(self.controller, 'doc_to_go', None)
-        if callable(exporter):
-            added = exporter(rows, zip_path)
-            self._status.setText('%d file(s) exported to %s' % (int(added or 0), zip_path))
-        else:
+
+        if QDialog is None or QFormLayout is None or QDialogButtonBox is None or QComboBox is None:
             self._dispatch_controller_action('actionDocToGo', 'doc_to_go')
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Document to go')
+        layout = QFormLayout(dialog)
+
+        action_combo = QComboBox(dialog)
+        action_combo.addItem('Export database', 'export_database')
+        action_combo.addItem('Export archive', 'export_archive')
+        action_combo.addItem('Import archive', 'import_archive')
+
+        scope_combo = QComboBox(dialog)
+        scope_combo.addItem('Selected documents', 'selected')
+        scope_combo.addItem('Current search result', 'filter')
+        scope_combo.addItem('Basket documents', 'basket')
+        scope_combo.addItem('All documents', 'all')
+
+        layout.addRow('Action', action_combo)
+        layout.addRow('Documents scope', scope_combo)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        layout.addRow(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        action_key = action_combo.currentData()
+        scope_key = scope_combo.currentData()
+        rows = self._rows_for_doc_to_go_scope(scope_key)
+
+        if not callable(do_action):
+            self._dispatch_controller_action('actionDocToGo', 'doc_to_go')
+            return
+
+        if action_key == 'import_archive':
+            archive_path, _selected_filter = QFileDialog.getOpenFileName(
+                self,
+                'Import archive',
+                '',
+                'Zip archives (*.zip)',
+            )
+            if not archive_path:
+                return
+            import_dir = QFileDialog.getExistingDirectory(self, 'Select extraction directory')
+            if not import_dir:
+                return
+            ok = do_action('import_archive', [], archive_path, import_dir)
+            if not ok:
+                self._status.setText('Unable to import archive')
+            return
+
+        default_name = 'documents.db' if action_key == 'export_database' else 'documents.zip'
+        output_path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            'Export',
+            default_name,
+            'Database files (*.db);;Zip archives (*.zip);;All files (*.*)',
+        )
+        if not output_path:
+            return
+        if action_key == 'export_archive' and not output_path.lower().endswith('.zip'):
+            output_path += '.zip'
+        ok = do_action(action_key, rows, output_path)
+        if not ok:
+            self._status.setText('Unable to export documents')
+
+    def _rows_for_doc_to_go_scope(self, scope_key):
+        if scope_key == 'selected':
+            return self.get_selected_rows()
+        if scope_key == 'basket':
+            return list(self.basket)
+        if scope_key == 'all':
+            if self.controller is not None and hasattr(self.controller, 'model'):
+                try:
+                    return self.controller.model.search_documents('')
+                except Exception:
+                    return []
+            return []
+        return list(self.docList)
+
+    def _show_survey_candidates_dialog(self, candidates):
+        if QDialog is None or QVBoxLayout is None or QListWidget is None or QDialogButtonBox is None:
+            return []
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Directory survey')
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel('Files not in the database:', dialog))
+        file_list = QListWidget(dialog)
+        if QAbstractItemView is not None:
+            file_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        for path in candidates:
+            item = QListWidgetItem(path)
+            item.setSelected(True)
+            file_list.addItem(item)
+        layout.addWidget(file_list)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        layout.addWidget(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return []
+        return [item.text() for item in file_list.selectedItems()]
 
     def action_start_survey(self):
-        starter = getattr(self.controller, 'start_survey', None)
-        if callable(starter):
-            imported = starter()
-            self._status.setText('%d file(s) imported from survey' % int(imported or 0))
-        else:
+        if self.controller is None:
             self._dispatch_controller_action('actionStartSurvey', 'start_survey')
+            return
+        lister = getattr(self.controller, 'survey_candidates', None)
+        importer = getattr(self.controller, 'add_file_entries', None)
+        if not callable(lister) or not callable(importer):
+            starter = getattr(self.controller, 'start_survey', None)
+            if callable(starter):
+                imported = starter()
+                self._status.setText('%d file(s) imported from survey' % self._safe_int(imported))
+            return
+        candidates = lister()
+        if not candidates:
+            self._status.setText('No new file found in survey directories')
+            return
+        selected = self._show_survey_candidates_dialog(candidates)
+        if not selected:
+            return
+        entries = self._collect_metadata_entries(selected, 'Survey document metadata')
+        if not entries:
+            return
+        imported = importer(entries)
+        self._status.setText('%d file(s) imported from survey' % self._safe_int(imported))
+
+    def _safe_int(self, value):
+        try:
+            return int(value or 0)
+        except Exception:
+            return 0
+
+    def _collect_metadata_entries(self, file_names, window_title):
+        if QDialog is None or QFormLayout is None or QDialogButtonBox is None:
+            return [{'path': path} for path in file_names if path]
+        entries = []
+        for path in file_names:
+            metadata = self._ask_document_metadata(path, window_title)
+            if metadata is None:
+                break
+            entries.append(metadata)
+        return entries
+
+    def _ask_document_metadata(self, file_path, window_title):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(window_title)
+        layout = QFormLayout(dialog)
+
+        title_default = os.path.splitext(os.path.basename(file_path))[0] or 'untitled'
+        title_edit = QLineEdit(title_default, dialog)
+        tags_edit = QLineEdit('', dialog)
+        description_edit = QTextEdit(dialog)
+        description_edit.setMinimumHeight(120)
+        date_edit = QLineEdit('', dialog)
+        date_edit.setPlaceholderText('YYYY-MM-DD (optional)')
+        preview_label = QLabel(dialog)
+        preview_label.setMinimumHeight(180)
+        preview_label.setStyleSheet('border: 1px solid #aaaaaa; background: #f8f8f8;')
+        preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        preview_pixmap = self._document_pixmap(file_path)
+        if preview_pixmap is not None and not preview_pixmap.isNull():
+            preview_label.setPixmap(
+                preview_pixmap.scaled(
+                    320,
+                    240,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            preview_label.setText('No preview available')
+
+        layout.addRow('File', QLabel(file_path, dialog))
+        layout.addRow('Preview', preview_label)
+        layout.addRow('Title', title_edit)
+        layout.addRow('Tags', tags_edit)
+        layout.addRow('Description', description_edit)
+        layout.addRow('Document date', date_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        layout.addRow(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        return {
+            'path': file_path,
+            'title': title_edit.text().strip() or title_default,
+            'tags': tags_edit.text().strip(),
+            'description': description_edit.toPlainText().strip(),
+            'document_date': date_edit.text().strip(),
+        }
+
+    def _acquire_scan_files(self):
+        if os.name == 'nt':
+            return self._acquire_scan_files_twain()
+        return self._acquire_scan_files_sane()
+
+    def _acquire_scan_files_twain(self):
+        try:
+            import twain
+            from PIL import Image as PILImage
+        except Exception:
+            if QMessageBox is not None:
+                QMessageBox.warning(
+                    self,
+                    'Scan',
+                    'TWAIN backend is unavailable. Select scanned files manually.',
+                )
+            file_names, _selected_filter = QFileDialog.getOpenFileNames(
+                self,
+                'Select scanned file(s)',
+                '',
+                'Images and PDF (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.pdf);;All files (*.*)',
+            )
+            return file_names
+
+        source_manager = None
+        source = None
+        files = []
+        handles = []
+        try:
+            hwnd = int(self.winId()) if hasattr(self, 'winId') else 0
+            source_manager = twain.SourceManager(hwnd, ProductName='MALODOS')
+            source_list = source_manager.GetSourceList() or []
+            if not source_list:
+                if QMessageBox is not None:
+                    QMessageBox.warning(self, 'Scan', 'No TWAIN scanner source detected.')
+                return []
+
+            selected_source, accepted = QInputDialog.getItem(
+                self,
+                'Scanner source',
+                'Choose a scanner source:',
+                list(source_list),
+                0,
+                False,
+            )
+            if not accepted:
+                return []
+
+            source = source_manager.OpenSource(selected_source)
+            source.RequestAcquire(0, 0)
+
+            while True:
+                try:
+                    handle, more_to_come = source.XferImageNatively()
+                except Exception:
+                    break
+                if not handle:
+                    break
+                handles.append(handle)
+                fd_bmp, bmp_path = tempfile.mkstemp(prefix='malodos_twain_', suffix='.bmp')
+                os.close(fd_bmp)
+                twain.DIBToBMFile(handle, bmp_path)
+
+                fd_png, png_path = tempfile.mkstemp(prefix='malodos_scan_', suffix='.png')
+                os.close(fd_png)
+                with PILImage.open(bmp_path) as img:
+                    img.load()
+                    img.save(png_path)
+                try:
+                    os.unlink(bmp_path)
+                except Exception:
+                    pass
+                files.append(png_path)
+                if not more_to_come:
+                    break
+
+            if not files and QMessageBox is not None:
+                QMessageBox.warning(self, 'Scan', 'No image received from TWAIN source.')
+            return files
+        except Exception as exc:
+            if QMessageBox is not None:
+                QMessageBox.warning(self, 'Scan', 'TWAIN acquisition failed: %s' % exc)
+            return []
+        finally:
+            for handle in handles:
+                try:
+                    twain.GlobalHandleFree(handle)
+                except Exception:
+                    pass
+            if source is not None:
+                try:
+                    source.destroy()
+                except Exception:
+                    pass
+            if source_manager is not None:
+                try:
+                    source_manager.destroy()
+                except Exception:
+                    pass
+
+    def _acquire_scan_files_sane(self):
+        try:
+            import sane
+            from PIL import Image as PILImage
+        except Exception:
+            if QMessageBox is not None:
+                QMessageBox.warning(
+                    self,
+                    'Scan',
+                    'SANE backend is unavailable. Select scanned files manually.',
+                )
+            file_names, _selected_filter = QFileDialog.getOpenFileNames(
+                self,
+                'Select scanned file(s)',
+                '',
+                'Images and PDF (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.pdf);;All files (*.*)',
+            )
+            return file_names
+
+        try:
+            with _suppress_native_output():
+                sane.init()
+                devices = sane.get_devices() or []
+            if not devices:
+                if QMessageBox is not None:
+                    QMessageBox.warning(self, 'Scan', 'No SANE scanner device detected.')
+                return []
+            device_labels = [d[2] or d[0] for d in devices]
+            selected_label, accepted = QInputDialog.getItem(
+                self,
+                'Scanner source',
+                'Choose a scanner source:',
+                device_labels,
+                0,
+                False,
+            )
+            if not accepted:
+                return []
+            idx = device_labels.index(selected_label)
+            scanner_name = devices[idx][0]
+
+            with _suppress_native_output():
+                scanner = sane.open(scanner_name)
+                image = scanner.scan()
+                scanner.close()
+
+            if not isinstance(image, PILImage.Image):
+                if QMessageBox is not None:
+                    QMessageBox.warning(self, 'Scan', 'Scanner did not return an image.')
+                return []
+
+            fd, tmp_path = tempfile.mkstemp(prefix='malodos_scan_', suffix='.png')
+            os.close(fd)
+            image.save(tmp_path)
+            return [tmp_path]
+        except Exception as exc:
+            if QMessageBox is not None:
+                QMessageBox.warning(self, 'Scan', 'SANE acquisition failed: %s' % exc)
+            return []
 
     def action_show_preferences(self):
         if QDialog is None or QFormLayout is None or QDialogButtonBox is None:
@@ -523,10 +962,26 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         ext_edit = QLineEdit(config.get_survey_extension_list(), dialog)
         auto_ocr = QCheckBox(dialog)
         auto_ocr.setChecked(config.get_param('OCR', 'autoStart', '1') in ('1', 'true', 'True'))
+        auto_scan = QCheckBox(dialog)
+        auto_scan.setChecked(config.get_param('scanner', 'autoScan', 'False', True).lower() == 'true')
+        auto_filename = QCheckBox(dialog)
+        auto_filename.setChecked(config.get_param('scanner', 'autoFileName', 'False', True).lower() == 'true')
+        scan_prefix = QLineEdit(config.get_param('scanner', 'autoFileNamePrefix', 'file', True), dialog)
+        default_scan_dir = QLineEdit(config.get_param('scanner', 'defaultDir', '', True), dialog)
+        encrypt_data = QCheckBox(dialog)
+        encrypt_data.setChecked(config.get_param('encryption', 'encryptData', 'False', True).lower() == 'true')
+        encrypt_db = QCheckBox(dialog)
+        encrypt_db.setChecked(config.get_param('encryption', 'encryptDatabase', 'False', True).lower() == 'true')
 
         layout.addRow('Language', language_edit)
         layout.addRow('Survey extensions', ext_edit)
         layout.addRow('Auto-start OCR', auto_ocr)
+        layout.addRow('Auto scan', auto_scan)
+        layout.addRow('Automatic file name', auto_filename)
+        layout.addRow('Auto file name prefix', scan_prefix)
+        layout.addRow('Default scan directory', default_scan_dir)
+        layout.addRow('Encrypt image files', encrypt_data)
+        layout.addRow('Encrypt database file', encrypt_db)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
         layout.addRow(buttons)
@@ -539,6 +994,12 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         config.set_current_language(language_edit.text().strip() or 'sys')
         config.set_survey_extension_list(ext_edit.text().strip())
         config.set_param('OCR', 'autoStart', '1' if auto_ocr.isChecked() else '0')
+        config.set_param('scanner', 'autoScan', 'True' if auto_scan.isChecked() else 'False', True)
+        config.set_param('scanner', 'autoFileName', 'True' if auto_filename.isChecked() else 'False', True)
+        config.set_param('scanner', 'autoFileNamePrefix', scan_prefix.text().strip() or 'file', True)
+        config.set_param('scanner', 'defaultDir', default_scan_dir.text().strip(), True)
+        config.set_param('encryption', 'encryptData', 'True' if encrypt_data.isChecked() else 'False', True)
+        config.set_param('encryption', 'encryptDatabase', 'True' if encrypt_db.isChecked() else 'False', True)
         config.commit_config()
         self._status.setText('Preferences saved')
 
