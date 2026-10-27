@@ -1,6 +1,8 @@
 import ast
 import configparser
 import os
+import webbrowser
+from urllib.parse import quote
 
 from .qt_setup import get_qapplication_class
 
@@ -33,27 +35,44 @@ def _to_text(value):
 
 try:
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QAction, QIcon, QImage, QPixmap
+    from PySide6.QtGui import QAction, QIcon, QImage, QPixmap, QTextDocument
+    from PySide6.QtPrintSupport import QPrintDialog, QPrinter
     from PySide6.QtWidgets import (
+        QAbstractItemView,
         QApplication,
+        QCheckBox,
+        QDialog,
+        QDialogButtonBox,
+        QFileDialog,
+        QFormLayout,
         QHBoxLayout,
+        QInputDialog,
         QLabel,
         QLineEdit,
         QListWidget,
         QListWidgetItem,
         QMainWindow,
+        QMessageBox,
         QPushButton,
         QScrollArea,
         QSplitter,
         QSizePolicy,
+        QTabWidget,
         QTextBrowser,
+        QTextEdit,
         QToolBar,
+        QTreeWidget,
+        QTreeWidgetItem,
         QVBoxLayout,
         QWidget,
     )
 except ImportError:  # pragma: no cover - optional in non-GUI test runs
     QAction = QToolBar = QApplication = QHBoxLayout = QLabel = QLineEdit = QListWidget = QListWidgetItem = QMainWindow = QPushButton = QTextBrowser = QVBoxLayout = QWidget = None
-    QScrollArea = QSplitter = QSizePolicy = None
+    QScrollArea = QSplitter = QSizePolicy = QTabWidget = QTreeWidget = QTreeWidgetItem = QAbstractItemView = None
+    QFileDialog = None
+    QInputDialog = QMessageBox = None
+    QDialog = QDialogButtonBox = QFormLayout = QTextEdit = QCheckBox = None
+    QPrinter = QPrintDialog = QTextDocument = None
     QPixmap = None
     QIcon = None
     Qt = None
@@ -86,6 +105,7 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         super(QtMainWindow, self).__init__()
         self.setWindowTitle(title)
         self.docList = []
+        self.basket = []
         self.controller = None
         self._search_in_progress = False
 
@@ -96,10 +116,66 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
 
         self._main_toolbar = self._build_main_toolbar()
 
-        self._search, self._search_button, self._search_bar = self._build_search_bar()
+        self._search, self._search_button, self._advanced_button, self._search_bar = self._build_search_bar()
         self._list = QListWidget(self._viewer)
         self._list.itemClicked.connect(self._on_item_clicked)
         self._list.currentRowChanged.connect(self._on_current_row_changed)
+        if QAbstractItemView is not None:
+            self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+        self._folder_tree = QTreeWidget(self._viewer) if QTreeWidget is not None else None
+        if self._folder_tree is not None:
+            self._folder_tree.setHeaderLabel('Folders')
+            self._folder_tree.itemSelectionChanged.connect(self._on_folder_tree_selection_changed)
+            if QAbstractItemView is not None:
+                self._folder_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+        self._tag_tree = QTreeWidget(self._viewer) if QTreeWidget is not None else None
+        if self._tag_tree is not None:
+            self._tag_tree.setHeaderLabel('Tags')
+            self._tag_tree.itemSelectionChanged.connect(self._on_tag_tree_selection_changed)
+            if QAbstractItemView is not None:
+                self._tag_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+        self._basket_list = QListWidget(self._viewer)
+        self._basket_list.itemClicked.connect(self._on_basket_item_clicked)
+        self._basket_remove_button = QPushButton('Remove from basket', self._viewer)
+        self._basket_remove_button.clicked.connect(self.action_basket_remove_selection)
+        self._basket_clear_button = QPushButton('Clear basket', self._viewer)
+        self._basket_clear_button.clicked.connect(self.action_basket_clear)
+
+        self._left_tabs = QTabWidget(self._viewer) if QTabWidget is not None else None
+        if self._left_tabs is not None:
+            flat_tab = QWidget(self._left_tabs)
+            flat_layout = QVBoxLayout(flat_tab)
+            flat_layout.setContentsMargins(0, 0, 0, 0)
+            flat_layout.addWidget(self._list)
+
+            folder_tab = QWidget(self._left_tabs)
+            folder_layout = QVBoxLayout(folder_tab)
+            folder_layout.setContentsMargins(0, 0, 0, 0)
+            if self._folder_tree is not None:
+                folder_layout.addWidget(self._folder_tree)
+
+            tag_tab = QWidget(self._left_tabs)
+            tag_layout = QVBoxLayout(tag_tab)
+            tag_layout.setContentsMargins(0, 0, 0, 0)
+            if self._tag_tree is not None:
+                tag_layout.addWidget(self._tag_tree)
+
+            basket_tab = QWidget(self._left_tabs)
+            basket_layout = QVBoxLayout(basket_tab)
+            basket_layout.setContentsMargins(0, 0, 0, 0)
+            basket_layout.addWidget(self._basket_list, 1)
+            basket_buttons = QHBoxLayout()
+            basket_buttons.addWidget(self._basket_remove_button)
+            basket_buttons.addWidget(self._basket_clear_button)
+            basket_layout.addLayout(basket_buttons)
+
+            self._left_tabs.addTab(flat_tab, 'Flat view')
+            self._left_tabs.addTab(folder_tab, 'Folder view')
+            self._left_tabs.addTab(tag_tab, 'Tag folder view')
+            self._left_tabs.addTab(basket_tab, 'Basket view')
 
         self._status = QLabel('0 document(s)', self._viewer)
         self._details = QTextBrowser(self._viewer)
@@ -143,7 +219,7 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
 
         self._main_splitter = QSplitter(Qt.Orientation.Horizontal, self._viewer) if QSplitter is not None and Qt is not None else None
         if self._main_splitter is not None:
-            self._main_splitter.addWidget(self._list)
+            self._main_splitter.addWidget(self._left_tabs if self._left_tabs is not None else self._list)
             self._main_splitter.addWidget(self._preview_panel)
             self._main_splitter.setChildrenCollapsible(False)
             self._main_splitter.setStretchFactor(0, 1)
@@ -156,7 +232,7 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
             content = QWidget(self._viewer)
             content_layout = QHBoxLayout(content)
             content_layout.setContentsMargins(0, 0, 0, 0)
-            content_layout.addWidget(self._list, 1)
+            content_layout.addWidget(self._left_tabs if self._left_tabs is not None else self._list, 1)
             content_layout.addWidget(self._preview_panel, 2)
             self._viewer_layout.addWidget(content, 1)
         self._viewer_layout.addWidget(self._status)
@@ -172,11 +248,15 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         search_button = QPushButton('Search', self._viewer)
         search_button.clicked.connect(self.actionSearch)
 
+        advanced_button = QPushButton('Advanced', self._viewer)
+        advanced_button.clicked.connect(self.action_build_request)
+
         bar = QWidget(self._viewer)
         layout = QHBoxLayout(bar)
         layout.addWidget(search)
         layout.addWidget(search_button)
-        return search, search_button, bar
+        layout.addWidget(advanced_button)
+        return search, search_button, advanced_button, bar
 
     def _build_toolbar(self):
         toolbar = QToolBar('Preview tools', self._preview_panel)
@@ -289,43 +369,340 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
                 return
 
     def action_add_file(self):
-        self._dispatch_controller_action('actionAddFile', 'add_file')
+        if QFileDialog is None:
+            self._dispatch_controller_action('actionAddFile', 'add_file')
+            return
+        file_names, _selected_filter = QFileDialog.getOpenFileNames(
+            self,
+            'Select document file(s)',
+            '',
+            'All files (*.*)',
+        )
+        if not file_names:
+            return
+        add_file_method = getattr(self.controller, 'add_file', None)
+        if callable(add_file_method):
+            added_count = add_file_method(file_names)
+            self._status.setText('%d file(s) imported' % int(added_count or 0))
+        else:
+            self._dispatch_controller_action('actionAddFile', 'add_file')
 
     def action_add_scan(self):
-        self._dispatch_controller_action('actionAddScan', 'add_scan')
+        if QFileDialog is None:
+            self._dispatch_controller_action('actionAddScan', 'add_scan')
+            return
+        file_names, _selected_filter = QFileDialog.getOpenFileNames(
+            self,
+            'Select scanned file(s)',
+            '',
+            'All files (*.*)',
+        )
+        if not file_names:
+            return
+        add_scan_method = getattr(self.controller, 'add_scan', None)
+        if callable(add_scan_method):
+            added_count = add_scan_method(file_names)
+            self._status.setText('%d file(s) imported' % int(added_count or 0))
+        else:
+            self._dispatch_controller_action('actionAddScan', 'add_scan')
 
     def action_remove_selection(self):
         self._dispatch_controller_action('actionRemoveRecord', 'remove_selection')
 
     def action_print_document(self):
-        self._dispatch_controller_action('actionDoPrint', 'print_document')
+        if not self.docList:
+            if QMessageBox is not None:
+                QMessageBox.information(self, 'Print', 'No document selected.')
+            return
+        row_index = self._list.currentRow() if hasattr(self, '_list') and self._list is not None else -1
+        if row_index < 0 or row_index >= len(self.docList):
+            row_index = 0
+        selected = self.docList[row_index]
+
+        if QPrinter is None or QPrintDialog is None or QTextDocument is None:
+            self._status.setText('Print backend is not available in this environment')
+            return
+
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        document = QTextDocument()
+        details = self._document_details(selected).replace('\n', '<br>')
+        document.setHtml('<h2>MALODOS</h2><p>%s</p>' % details)
+        document.print(printer)
+        self._status.setText('Document sent to printer')
 
     def action_basket(self):
+        rows = self.get_selected_rows()
+        if rows:
+            self._basket_add_rows(rows)
+        if self._left_tabs is not None:
+            self._left_tabs.setCurrentIndex(3)
         self._dispatch_controller_action('actionBasket', 'open_basket')
 
+    def action_basket_remove_selection(self):
+        rows = []
+        for item in self._basket_list.selectedItems():
+            row = item.data(Qt.ItemDataRole.UserRole if Qt is not None else 0)
+            if row is not None:
+                rows.append(row)
+        self._basket_remove_rows(rows)
+
+    def action_basket_clear(self):
+        self.basket = []
+        self._refresh_basket_view()
+
+    def action_build_request(self):
+        if QInputDialog is None:
+            return
+        current = self._search.text() if hasattr(self, '_search') else ''
+        query, accepted = QInputDialog.getText(
+            self,
+            'Advanced query',
+            'Enter an advanced filter expression:',
+            text=current,
+        )
+        if accepted:
+            self._search.setText(query)
+
     def action_doc_to_go(self):
-        self._dispatch_controller_action('actionDocToGo', 'doc_to_go')
+        if QFileDialog is None:
+            self._dispatch_controller_action('actionDocToGo', 'doc_to_go')
+            return
+        rows = self.get_selected_rows()
+        if not rows:
+            rows = list(self.docList)
+        if not rows:
+            self._status.setText('No document available for export')
+            return
+        zip_path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            'Export documents',
+            'documents.zip',
+            'Zip archives (*.zip)',
+        )
+        if not zip_path:
+            return
+        if not zip_path.lower().endswith('.zip'):
+            zip_path += '.zip'
+        exporter = getattr(self.controller, 'doc_to_go', None)
+        if callable(exporter):
+            added = exporter(rows, zip_path)
+            self._status.setText('%d file(s) exported to %s' % (int(added or 0), zip_path))
+        else:
+            self._dispatch_controller_action('actionDocToGo', 'doc_to_go')
 
     def action_start_survey(self):
-        self._dispatch_controller_action('actionStartSurvey', 'start_survey')
+        starter = getattr(self.controller, 'start_survey', None)
+        if callable(starter):
+            imported = starter()
+            self._status.setText('%d file(s) imported from survey' % int(imported or 0))
+        else:
+            self._dispatch_controller_action('actionStartSurvey', 'start_survey')
 
     def action_show_preferences(self):
-        self._dispatch_controller_action('actionShowPrefs', 'show_preferences')
+        if QDialog is None or QFormLayout is None or QDialogButtonBox is None:
+            self._dispatch_controller_action('actionShowPrefs', 'show_preferences')
+            return
+        try:
+            import database
+            config = getattr(database, 'theConfig', None)
+        except Exception:
+            config = None
+        if config is None:
+            self._status.setText('Configuration is not available')
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Preferences')
+        layout = QFormLayout(dialog)
+
+        language_edit = QLineEdit(config.get_param('language', 'current', 'sys'), dialog)
+        ext_edit = QLineEdit(config.get_survey_extension_list(), dialog)
+        auto_ocr = QCheckBox(dialog)
+        auto_ocr.setChecked(config.get_param('OCR', 'autoStart', '1') in ('1', 'true', 'True'))
+
+        layout.addRow('Language', language_edit)
+        layout.addRow('Survey extensions', ext_edit)
+        layout.addRow('Auto-start OCR', auto_ocr)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        layout.addRow(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        config.set_current_language(language_edit.text().strip() or 'sys')
+        config.set_survey_extension_list(ext_edit.text().strip())
+        config.set_param('OCR', 'autoStart', '1' if auto_ocr.isChecked() else '0')
+        config.commit_config()
+        self._status.setText('Preferences saved')
 
     def action_about(self):
-        self._dispatch_controller_action('actionAbout', 'show_about')
+        if QMessageBox is None:
+            self._dispatch_controller_action('actionAbout', 'show_about')
+            return
+        try:
+            from homeDocs import __version__
+        except Exception:
+            __version__ = 'unknown'
+        text = (
+            'MALODOS (MAnagement of LOcal DOcument System)\\n\\n'
+            'Simple document archiving and navigation utility.\\n'
+            'Version: %s\\n\\n'
+            'Project website: http://sites.google.com/site/malodospage/'
+        ) % __version__
+        QMessageBox.about(self, 'About MALODOS', text)
 
     def action_report(self):
-        self._dispatch_controller_action('actionReport', 'report_bug')
+        if QDialog is None or QFormLayout is None or QTextEdit is None or QDialogButtonBox is None:
+            self._dispatch_controller_action('actionReport', 'report_bug')
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Bug report')
+        layout = QFormLayout(dialog)
+
+        name_edit = QLineEdit(dialog)
+        description_edit = QTextEdit(dialog)
+        description_edit.setMinimumHeight(180)
+
+        layout.addRow('Your name', name_edit)
+        layout.addRow('Bug description', description_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        layout.addRow(buttons)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        try:
+            from homeDocs import __version__
+        except Exception:
+            __version__ = 'unknown'
+
+        subject = 'BUG report for MALODOS version %s' % __version__
+        body = 'Hello, my name is %s\\nI found a bug described here:\\n%s\\n' % (
+            name_edit.text().strip(),
+            description_edit.toPlainText().strip(),
+        )
+
+        try:
+            import database
+            conf_dir = getattr(getattr(database, 'theConfig', None), 'conf_dir', None)
+            if conf_dir:
+                logfilename = os.path.join(conf_dir, 'messages.log')
+                if os.path.exists(logfilename):
+                    with open(logfilename, 'r', encoding='utf-8', errors='replace') as log_file:
+                        body += '\\n\\nLog file content:\\n----------\\n'
+                        body += log_file.read()
+        except Exception:
+            pass
+
+        mailto_url = 'mailto:guezdav@gmail.com?subject=%s&body=%s' % (
+            quote(subject),
+            quote(body),
+        )
+        webbrowser.open(mailto_url)
+        self._status.setText('Bug report draft opened in your mail client')
 
     def action_support(self):
-        self._dispatch_controller_action('actionSupport', 'show_support')
+        webbrowser.open(
+            'https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=D7H33JFSFA98J&lc=IL&item_name=David%20GUEZ&item_number=MALODOS&currency_code=ILS&bn=PP%2dDonationsBF%3abtn_donateCC_LG%2egif%3aNonHosted'
+        )
+        self._status.setText('Support page opened in your browser')
 
     def _on_item_clicked(self, item):
         self.select_document(self._list.row(item))
 
     def _on_current_row_changed(self, row):
         self.select_document(row)
+
+    def _on_folder_tree_selection_changed(self):
+        if self._folder_tree is None:
+            return
+        selected_rows = []
+        for item in self._folder_tree.selectedItems():
+            row = item.data(0, Qt.ItemDataRole.UserRole if Qt is not None else 0)
+            if row is not None:
+                selected_rows.append(row)
+        if selected_rows:
+            self.select_document(selected_rows[0])
+
+    def _on_tag_tree_selection_changed(self):
+        if self._tag_tree is None:
+            return
+        selected_rows = []
+        for item in self._tag_tree.selectedItems():
+            row = item.data(0, Qt.ItemDataRole.UserRole if Qt is not None else 0)
+            if row is not None:
+                selected_rows.append(row)
+        if selected_rows:
+            self.select_document(selected_rows[0])
+
+    def _on_basket_item_clicked(self, item):
+        row = item.data(Qt.ItemDataRole.UserRole if Qt is not None else 0)
+        if row is not None:
+            self.select_document(row)
+
+    def _document_id(self, row):
+        if isinstance(row, dict):
+            for key in ('id', 'rowid', 'doc_id'):
+                if key in row and row[key] is not None:
+                    return row[key]
+            return None
+        if isinstance(row, (list, tuple)):
+            try:
+                import database
+                idx_rowid = getattr(database.theBase, 'IDX_ROWID', None)
+                if idx_rowid is not None and idx_rowid < len(row):
+                    return row[idx_rowid]
+            except Exception:
+                return None
+        return None
+
+    def _document_tags(self, row):
+        raw = None
+        if isinstance(row, dict):
+            raw = row.get('tags')
+        elif isinstance(row, (list, tuple)):
+            try:
+                import database
+                idx_tags = getattr(database.theBase, 'IDX_TAGS', None)
+                if idx_tags is not None and idx_tags < len(row):
+                    raw = row[idx_tags]
+            except Exception:
+                raw = None
+        text = _to_text(raw)
+        if not text:
+            return []
+        return [part.strip() for part in text.split(',') if part.strip()]
+
+    def _document_folder_paths(self, row):
+        doc_id = self._document_id(row)
+        if doc_id is None:
+            return []
+        try:
+            import database
+            folder_ids = database.theBase.folders_list_for(doc_id)
+            paths = []
+            for folder_id in folder_ids:
+                genealogy = database.theBase.folders_genealogy_of(folder_id, True)
+                if genealogy:
+                    if isinstance(genealogy[0], str):
+                        paths.append('/'.join(genealogy))
+                    else:
+                        names = [name for (_fid, name) in genealogy if name]
+                        if names:
+                            paths.append('/'.join(names))
+            return paths
+        except Exception:
+            return []
 
     def _document_details(self, row):
         if isinstance(row, dict):
@@ -617,6 +994,8 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
                 self._list.addItem(QListWidgetItem('No documents found'))
                 self._status.setText('0 document(s)')
                 self._details.setPlainText('No document selected')
+                self._refresh_folder_tree()
+                self._refresh_tag_tree()
                 return
             for document in self.docList:
                 item = QListWidgetItem(self._document_title(document))
@@ -625,9 +1004,195 @@ class QtMainWindow(QMainWindow if QMainWindow is not None else object):
         finally:
             self._list.blockSignals(previous_signal_state)
         self._status.setText('%d document(s)' % len(self.docList))
+        self._refresh_folder_tree()
+        self._refresh_tag_tree()
+        self._refresh_basket_view()
         if self._list.count() > 0:
             self._details.setPlainText('Select a document to view details')
             self._set_document_image(None)
+
+    def _refresh_folder_tree(self):
+        if self._folder_tree is None:
+            return
+        self._folder_tree.blockSignals(True)
+        try:
+            self._folder_tree.clear()
+            root = QTreeWidgetItem(['ROOT'])
+            root.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, None)
+            self._folder_tree.addTopLevelItem(root)
+
+            unclassified = QTreeWidgetItem(['Unclassified'])
+            unclassified.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, None)
+            root.addChild(unclassified)
+
+            folder_nodes = {}
+            for row in self.docList:
+                title = self._document_title(row)
+                folder_paths = self._document_folder_paths(row)
+                if not folder_paths:
+                    doc_item = QTreeWidgetItem([title])
+                    doc_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, row)
+                    unclassified.addChild(doc_item)
+                    continue
+                for path in folder_paths:
+                    parent = root
+                    current_path = []
+                    for part in [p for p in path.split('/') if p]:
+                        current_path.append(part)
+                        key = '/'.join(current_path)
+                        node = folder_nodes.get(key)
+                        if node is None:
+                            node = QTreeWidgetItem([part])
+                            node.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, None)
+                            parent.addChild(node)
+                            folder_nodes[key] = node
+                        parent = node
+                    doc_item = QTreeWidgetItem([title])
+                    doc_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, row)
+                    parent.addChild(doc_item)
+            self._folder_tree.expandAll()
+        finally:
+            self._folder_tree.blockSignals(False)
+
+    def _refresh_tag_tree(self):
+        if self._tag_tree is None:
+            return
+        self._tag_tree.blockSignals(True)
+        try:
+            self._tag_tree.clear()
+            root = QTreeWidgetItem(['ROOT'])
+            root.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, None)
+            self._tag_tree.addTopLevelItem(root)
+
+            tagged_rows = []
+            untagged = []
+            for row in self.docList:
+                if self._document_tags(row):
+                    tagged_rows.append(row)
+                else:
+                    untagged.append(row)
+
+            self._fill_tag_tree_recursive(root, tagged_rows, set())
+
+            if untagged:
+                untagged_item = QTreeWidgetItem(['Untagged'])
+                untagged_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, None)
+                root.addChild(untagged_item)
+                for row in untagged:
+                    doc_item = QTreeWidgetItem([self._document_title(row)])
+                    doc_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, row)
+                    untagged_item.addChild(doc_item)
+
+            self._tag_tree.expandAll()
+        finally:
+            self._tag_tree.blockSignals(False)
+
+    def _fill_tag_tree_recursive(self, parent_item, rows, refused_tags):
+        if not rows:
+            return
+
+        tag_freq = {}
+        for row in rows:
+            for tag in self._document_tags(row):
+                key = tag.lower()
+                if key in refused_tags:
+                    continue
+                bucket = tag_freq.setdefault(key, {'label': tag, 'count': 0})
+                bucket['count'] += 1
+
+        if not tag_freq:
+            for row in rows:
+                doc_item = QTreeWidgetItem([self._document_title(row)])
+                doc_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, row)
+                parent_item.addChild(doc_item)
+            return
+
+        # Mimic legacy behavior: only split into subgroups when a tag is frequent enough.
+        top_key, top_info = max(tag_freq.items(), key=lambda kv: kv[1]['count'])
+        if top_info['count'] <= 5:
+            for row in rows:
+                doc_item = QTreeWidgetItem([self._document_title(row)])
+                doc_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, row)
+                parent_item.addChild(doc_item)
+            return
+
+        grouped = []
+        remaining = []
+        for row in rows:
+            row_tags = {t.lower() for t in self._document_tags(row)}
+            if top_key in row_tags:
+                grouped.append(row)
+            else:
+                remaining.append(row)
+
+        group_item = QTreeWidgetItem([top_info['label']])
+        group_item.setData(0, Qt.ItemDataRole.UserRole if Qt is not None else 0, None)
+        parent_item.addChild(group_item)
+
+        self._fill_tag_tree_recursive(group_item, grouped, refused_tags | {top_key})
+        self._fill_tag_tree_recursive(parent_item, remaining, refused_tags)
+
+    def _basket_add_rows(self, rows):
+        if not rows:
+            return
+        existing = {self._document_id(row) for row in self.basket}
+        for row in rows:
+            doc_id = self._document_id(row)
+            if doc_id is not None and doc_id in existing:
+                continue
+            if doc_id is not None:
+                existing.add(doc_id)
+            self.basket.append(row)
+        self._refresh_basket_view()
+
+    def _basket_remove_rows(self, rows):
+        if not rows:
+            return
+        remove_ids = {self._document_id(row) for row in rows}
+        new_basket = []
+        for row in self.basket:
+            doc_id = self._document_id(row)
+            if doc_id in remove_ids:
+                continue
+            new_basket.append(row)
+        self.basket = new_basket
+        self._refresh_basket_view()
+
+    def _refresh_basket_view(self):
+        self._basket_list.blockSignals(True)
+        try:
+            self._basket_list.clear()
+            for row in self.basket:
+                item = QListWidgetItem(self._document_title(row))
+                item.setData(Qt.ItemDataRole.UserRole if Qt is not None else 0, row)
+                self._basket_list.addItem(item)
+        finally:
+            self._basket_list.blockSignals(False)
+
+    def get_selected_rows(self):
+        rows = []
+        active_tab = self._left_tabs.currentIndex() if self._left_tabs is not None else 0
+        if active_tab == 0:
+            for item in self._list.selectedItems():
+                row = item.data(Qt.ItemDataRole.UserRole if Qt is not None else 0)
+                if row is not None:
+                    rows.append(row)
+        elif active_tab == 1 and self._folder_tree is not None:
+            for item in self._folder_tree.selectedItems():
+                row = item.data(0, Qt.ItemDataRole.UserRole if Qt is not None else 0)
+                if row is not None:
+                    rows.append(row)
+        elif active_tab == 2 and self._tag_tree is not None:
+            for item in self._tag_tree.selectedItems():
+                row = item.data(0, Qt.ItemDataRole.UserRole if Qt is not None else 0)
+                if row is not None:
+                    rows.append(row)
+        elif active_tab == 3:
+            for item in self._basket_list.selectedItems():
+                row = item.data(Qt.ItemDataRole.UserRole if Qt is not None else 0)
+                if row is not None:
+                    rows.append(row)
+        return rows
 
 
 class MainView(object):

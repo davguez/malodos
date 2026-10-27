@@ -322,6 +322,172 @@ class MvcArchitectureTest(unittest.TestCase):
         self.assertTrue(controller.queries)
         self.assertEqual(controller.queries[-1], 'abc')
 
+    def test_left_tabs_include_flat_folder_tag_and_basket(self):
+        from mvc.views import MainView
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+
+        self.assertTrue(hasattr(frame, '_left_tabs'))
+        self.assertIsNotNone(frame._left_tabs)
+        self.assertEqual(frame._left_tabs.count(), 4)
+
+    def test_tree_views_are_populated_from_documents(self):
+        from mvc.views import MainView
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+
+        frame.set_documents([
+            {'title': 'Alpha', 'tags': 'tag1,tag2'},
+            {'title': 'Beta', 'tags': 'tag2'},
+        ])
+
+        self.assertIsNotNone(frame._tag_tree)
+        self.assertGreater(frame._tag_tree.topLevelItemCount(), 0)
+        self.assertIsNotNone(frame._folder_tree)
+        self.assertGreater(frame._folder_tree.topLevelItemCount(), 0)
+
+    def test_basket_action_adds_selected_document(self):
+        from mvc.views import MainView
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+
+        frame.set_documents([
+            {'title': 'Alpha'},
+            {'title': 'Beta'},
+        ])
+        frame._list.setCurrentRow(0)
+        frame._list.item(0).setSelected(True)
+        frame.action_basket()
+
+        self.assertEqual(len(frame.basket), 1)
+        self.assertEqual(frame._basket_list.count(), 1)
+        self.assertEqual(frame._left_tabs.currentIndex(), 3)
+
+    def test_controller_toolbar_actions_are_no_longer_pending_placeholders(self):
+        from mvc.controllers import MainController
+
+        controller = MainController()
+        controller.initialize()
+
+        self.assertTrue(controller.actionAddScan())
+        self.assertTrue(controller.actionDoPrint())
+        self.assertTrue(controller.actionDocToGo())
+        self.assertTrue(controller.actionShowPrefs())
+        self.assertTrue(controller.actionAbout())
+        self.assertTrue(controller.actionReport())
+        self.assertTrue(controller.actionSupport())
+
+    def test_add_file_action_uses_file_dialog_and_controller(self):
+        import mvc.views as views_module
+        from mvc.views import MainView
+
+        class _ControllerStub(object):
+            def __init__(self):
+                self.calls = []
+
+            def add_file(self, file_paths):
+                self.calls.append(list(file_paths))
+                return len(file_paths)
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+        frame.controller = _ControllerStub()
+
+        original_dialog = views_module.QFileDialog
+
+        class _FakeDialog(object):
+            @staticmethod
+            def getOpenFileNames(*_args, **_kwargs):
+                return (['/tmp/a.pdf', '/tmp/b.pdf'], '')
+
+        views_module.QFileDialog = _FakeDialog
+        try:
+            frame.action_add_file()
+        finally:
+            views_module.QFileDialog = original_dialog
+
+        self.assertEqual(frame.controller.calls, [['/tmp/a.pdf', '/tmp/b.pdf']])
+        self.assertIn('2 file(s) imported', frame._status.text())
+
+    def test_add_scan_action_uses_file_dialog_and_controller(self):
+        import mvc.views as views_module
+        from mvc.views import MainView
+
+        class _ControllerStub(object):
+            def __init__(self):
+                self.calls = []
+
+            def add_scan(self, file_paths):
+                self.calls.append(list(file_paths))
+                return len(file_paths)
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+        frame.controller = _ControllerStub()
+
+        original_dialog = views_module.QFileDialog
+
+        class _FakeDialog(object):
+            @staticmethod
+            def getOpenFileNames(*_args, **_kwargs):
+                return (['/tmp/scan1.png', '/tmp/scan2.png'], '')
+
+        views_module.QFileDialog = _FakeDialog
+        try:
+            frame.action_add_scan()
+        finally:
+            views_module.QFileDialog = original_dialog
+
+        self.assertEqual(frame.controller.calls, [['/tmp/scan1.png', '/tmp/scan2.png']])
+        self.assertIn('2 file(s) imported', frame._status.text())
+
+    def test_doc_to_go_action_uses_save_dialog_and_controller(self):
+        import mvc.views as views_module
+        from mvc.views import MainView
+
+        class _ControllerStub(object):
+            def __init__(self):
+                self.calls = []
+
+            def doc_to_go(self, rows, zip_path):
+                self.calls.append((list(rows), zip_path))
+                return len(rows)
+
+        view = MainView()
+        view.initialize()
+        frame = view.frame
+        frame.controller = _ControllerStub()
+        frame.set_documents([
+            {'title': 'Alpha', 'filename': '/tmp/a.pdf'},
+            {'title': 'Beta', 'filename': '/tmp/b.pdf'},
+        ])
+
+        original_dialog = views_module.QFileDialog
+
+        class _FakeDialog(object):
+            @staticmethod
+            def getSaveFileName(*_args, **_kwargs):
+                return ('/tmp/exported', '')
+
+        views_module.QFileDialog = _FakeDialog
+        try:
+            frame.action_doc_to_go()
+        finally:
+            views_module.QFileDialog = original_dialog
+
+        self.assertEqual(len(frame.controller.calls), 1)
+        _rows, path = frame.controller.calls[0]
+        self.assertEqual(path, '/tmp/exported.zip')
+        self.assertIn('2 file(s) exported', frame._status.text())
+
     def test_root_mvc_package_exports_app_module(self):
         import importlib
         import mvc
