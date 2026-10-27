@@ -160,14 +160,8 @@ class FlatView(wx.NotebookPage):
 
             idt = wx.NewId()
             self.idDict[idt] = row
-
-            itm = wx.ListItem()
-            itm.SetText(title)
-            itm.SetData(idt)
-            itm.SetColumn(0)
-
-            #n_it = self.lbDocuments.InsertItem(itm)
-            self.lbDocuments.InsertItem(itm)
+            item_index = self.lbDocuments.InsertItem(self.lbDocuments.GetItemCount(), title)
+            self.lbDocuments.SetItemData(item_index, idt)
             #if row[database.theBase.IDX_ROWID] in self.board.basket_idList() : self.lbDocuments.SetItemTextColour(n_it,wx.RED)
             #self.lbDocuments.SetItemData(n_it,row)
             #item = self.lbDocuments.FindString(title)
@@ -543,7 +537,7 @@ class MainFrame(wx.Frame):
 
         # adding widgets into sizers (--> creating layout)
         self.searchPart.Add(self.label2,0,wx.ALIGN_LEFT)
-        self.searchPart.Add(self.tbFilter,1,wx.EXPAND |wx.ALIGN_CENTER_VERTICAL)
+        self.searchPart.Add(self.tbFilter,1,wx.EXPAND)
         self.searchPart.Add(self.btBuildFilter,0,wx.EXPAND)
         self.searchPart.Layout()
         
@@ -551,7 +545,7 @@ class MainFrame(wx.Frame):
         self.upPart.Layout()
         
         self.totalWin.Add(self.upPart,0,wx.EXPAND)
-        self.totalWin.Add(self.docPart,1,wx.EXPAND |wx.ALIGN_BOTTOM)
+        self.totalWin.Add(self.docPart,1,wx.EXPAND)
         self.totalWin.Layout()
 
         self.Bind(wx.EVT_TEXT_ENTER, self.actionSearch, self.tbFilter)

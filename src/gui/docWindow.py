@@ -12,6 +12,7 @@ for navigating between the  images managed by the data singleton
 '''
 import data
 from database import Resources
+import wx
 import wx.lib.buttons
 from PIL import Image
 #from BufferedCanvas import BufferedCanvas
@@ -31,6 +32,11 @@ class docWindow(wx.Window) :
     window=[1.0,1.0]
     dragFirstCenter = None
     dragFirstPos = None
+
+    if hasattr(Image, 'Resampling'):
+        RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
+    else:
+        RESAMPLE_LANCZOS = Image.ANTIALIAS
     #===========================================================================
     # constructor (gui building)
     #===========================================================================
@@ -66,8 +72,8 @@ class docWindow(wx.Window) :
         #self.canvas = self.MyCanvas(self.panel,-1)
         self.canvas = wx.StaticBitmap(self.panel, -1)
         #self.canvas.SetDoubleBuffered(False)
-        self.totalWin.Add(self.buttonPart,0,wx.ALIGN_TOP|wx.EXPAND)
-        self.totalWin.Add(self.canvas,1,wx.GROW|wx.EXPAND|wx.ALIGN_CENTER)
+        self.totalWin.Add(self.buttonPart,0,wx.EXPAND)
+        self.totalWin.Add(self.canvas,1,wx.GROW|wx.EXPAND)
         self.buttonPart.Add(self.btLeft ,0)
         self.buttonPart.Add(self.btRight,0)
         self.buttonPart.Add(self.btZoomPlus ,0)
@@ -120,13 +126,16 @@ class docWindow(wx.Window) :
     def getViewRect(self):
         s=self.img.size
         # build and test the viewing rect
-        viewRect = wx.Rect((self.center[0]-self.window[0]/2)*s[0] \
-                          ,(self.center[1]-self.window[1]/2)*s[1] \
-                          ,self.window[0]*s[0] ,self.window[1]*s[1])
+        viewRect = wx.Rect(
+            int((self.center[0]-self.window[0]/2)*s[0]),
+            int((self.center[1]-self.window[1]/2)*s[1]),
+            int(self.window[0]*s[0]),
+            int(self.window[1]*s[1]),
+        )
         if viewRect.x<0 : viewRect.x=0;
         if viewRect.y<0 : viewRect.y=0;
         if viewRect.x>= s[0] : viewRect.x = s[0] -1
-        if viewRect.y>= s[1] : viewRect.y = s[0] -1
+        if viewRect.y>= s[1] : viewRect.y = s[1] -1
         if viewRect.width<1 : viewRect.width = 1
         if viewRect.height<1 : viewRect.height = 1
         if viewRect.width > s[0] : viewRect.width = s[0]
@@ -145,7 +154,7 @@ class docWindow(wx.Window) :
         self.canvas.SetEvtHandlerEnabled(False)
         MAX_RESOLUTION = 1024
         if do_layout:
-            self.panel.SetSize(self.GetSizeTuple())
+            self.panel.SetSize(self.GetSize())
             self.totalWin.Layout()
         if len(data.theData.pil_images)==0:
             self.lbImage.SetLabel(_('no page'))
@@ -161,7 +170,7 @@ class docWindow(wx.Window) :
                 qmin = min(q)
                 if qmin <1 :
                     res_final = [ int(s[0] * qmin) , int(s[1] * qmin) ]
-                    self.img=self.img.resize(res_final,Image.ANTIALIAS)
+                    self.img=self.img.resize(res_final,self.RESAMPLE_LANCZOS)
         #if self.img is None: return
         viewRect = self.getViewRect()
 
@@ -186,29 +195,30 @@ class docWindow(wx.Window) :
                 if viewRect.x<0:
                     w+=viewRect.x
                     viewRect.x=0
-                viewRect.width=w
+                viewRect.width=int(w)
             else:
                 viewRect.x=0
                 viewRect.width=img_size[0]
-            size[0] = q*viewRect.width
+            size[0] = int(q*viewRect.width)
         else:# keep x @ canvas size
             q = factors[0]
             s = q * img_size[1] # size in screen that should be used along y
             if s>self.canvasSize[1]: # if y size would be too big 
                 h =self.canvasSize[1]/q # part of the image corresponding to canvas size along y
                 viewRect.y=viewRect.y+viewRect.height/2-h/2
-                viewRect.height=h
+                viewRect.height=int(h)
             else:
                 viewRect.y=0
                 viewRect.height=img_size[1]
-            size[1] = q*viewRect.height
+            size[1] = int(q*viewRect.height)
         theImage = self.img.crop((viewRect.x,viewRect.y,viewRect.x+viewRect.width-1,viewRect.y+viewRect.height-1))
         if size[0]>0 and size[1]>0:
             # do stretching and drawing if sizes are ok
-            displ = [ self.canvasPos[0] + (self.canvasSize[0] - size[0])/2 , self.canvasPos[1] + (self.canvasSize[1] - size[1])/2 ]
+            displ = [ int(self.canvasPos[0] + (self.canvasSize[0] - size[0])/2) , int(self.canvasPos[1] + (self.canvasSize[1] - size[1])/2) ]
             self.canvas.SetPosition(displ)
-            self.canvas.SetSize(size)
-            wxbm = wx.Bitmap.FromBuffer(size[0],size[1],theImage.resize(size,quality).tobytes())
+            self.canvas.SetSize((int(size[0]), int(size[1])))
+            resized = theImage.resize((int(size[0]), int(size[1])), quality)
+            wxbm = wx.Bitmap.FromBuffer(int(size[0]),int(size[1]),resized.tobytes())
             self.canvas.SetBitmap(wxbm)
         self.canvas.SetEvtHandlerEnabled(True)
     #===========================================================================

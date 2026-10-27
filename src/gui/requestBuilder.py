@@ -292,7 +292,7 @@ class builderPage(wx.NotebookPage):
         explanations += _('Click on the [+] button to add another group of conditions after the corresponding line\n')
         explanations += _('Click on the - button to remove the condition on the corresponding line\n')
         explanations += _('Click on the [-] button to remove the group of conditions for the corresponding line')
-        self.totSizer.Add(wx.StaticText(self.panel,-1,explanations,style=wx.TE_MULTILINE),(0,0),span=(1,4),flag=wx.ALIGN_TOP|wx.EXPAND)
+        self.totSizer.Add(wx.StaticText(self.panel,-1,explanations,style=wx.TE_MULTILINE),(0,0),span=(1,4),flag=wx.EXPAND)
         self.rtHuman     = rt.RichTextCtrl(self.panel,-1,style=wx.TE_AUTO_URL)
         self.rtHuman.SetEditable(False)
         self.rtHuman.GetCaret().Hide()
@@ -301,7 +301,7 @@ class builderPage(wx.NotebookPage):
         self.btCancel = wx.Button(self.panel,-1,_('Cancel'))
       
         self.totSizer.Add(self.rtHuman,(1,0),span=(1,4),flag=wx.EXPAND)
-        self.totSizer.Add(self.requestPreview,(2,0),span=(1,4),flag=wx.ALIGN_TOP|wx.EXPAND)
+        self.totSizer.Add(self.requestPreview,(2,0),span=(1,4),flag=wx.EXPAND)
         self.totSizer.Add(self.btOk, pos=(3,0),span=(1,1),flag=wx.ALIGN_RIGHT)
         self.totSizer.Add(self.btCancel, pos=(3,1),span=(1,1),flag=wx.ALIGN_LEFT)
         
@@ -465,4 +465,3 @@ class builder(wx.Dialog):
         self.totSizer.Add(self.Pane,1,wx.GROW|wx.EXPAND|wx.ALL)
         self.panel.SetSizerAndFit(self.totSizer)
         self.SetSize((700,400))
-

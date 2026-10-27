@@ -32,7 +32,7 @@ def getSmallUpArrowBitmap():
     return BitmapFromImage(getSmallUpArrowImage())
 
 def getSmallUpArrowImage():
-    stream = io.BytesIO(getSmallUpArrowData())
+    stream = io.BytesIO(getSmallUpArrowData().encode('latin-1'))
     return ImageFromStream(stream)
 
 
@@ -49,7 +49,7 @@ def getSmallDnArrowBitmap():
     return BitmapFromImage(getSmallDnArrowImage())
 
 def getSmallDnArrowImage():
-    stream = io.BytesIO(getSmallDnArrowData())
+    stream = io.BytesIO(getSmallDnArrowData().encode('latin-1'))
     return ImageFromStream(stream)
 #----------------------------------------------------------------------
 

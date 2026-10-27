@@ -8,7 +8,11 @@ attached to this project (LICENSE.txt file)
 class related to the document to go wizard
 '''
 
-import wx.wizard
+import wx
+try:
+    import wx.adv as wx_wizard
+except ImportError:
+    import wx.wizard as wx_wizard
 from . import dbGui
 from . import utilities
 import os
@@ -22,7 +26,7 @@ from algorithms.words import get_available_languages
 from algorithms.general import str_to_bool
 import gui.utilities
 
-class StartupWizard(wx.wizard.Wizard):
+class StartupWizard(wx_wizard.Wizard):
     '''
     wizard helping user to configure the preferences
     '''
@@ -32,7 +36,7 @@ class StartupWizard(wx.wizard.Wizard):
         '''
         Constructor
         '''
-        wx.wizard.Wizard.__init__(self,parent,-1,_('Startup wizard'))
+        wx_wizard.Wizard.__init__(self,parent,-1,_('Startup wizard'))
         
         dlg=utilities.ProgressDialog(_('Getting scanner list'),_('The list of acquisition device is being retrieved. Please wait a moment.'))
         dlg.set_current_step_to(0.5)
@@ -42,8 +46,8 @@ class StartupWizard(wx.wizard.Wizard):
         self.pageOCR      = PageOCRChoice(self)
         self.pageSurvey   = PageSurveyChoice(self)
         #self.pageFolders  = PageFoldersChoice(self)
-        self.Bind(wx.wizard.EVT_WIZARD_FINISHED, self.on_finished)
-        self.Bind(wx.wizard.EVT_WIZARD_CANCEL, self.on_cancel)
+        self.Bind(wx_wizard.EVT_WIZARD_FINISHED, self.on_finished)
+        self.Bind(wx_wizard.EVT_WIZARD_CANCEL, self.on_cancel)
         self.GetPageAreaSizer().Add(self.pageDatabase)
         self.params=params
         dlg.destroy()
@@ -57,9 +61,9 @@ class StartupWizard(wx.wizard.Wizard):
         #self.pageFolders.actionSave()
         database.theConfig.commit_config()
  
-class PageDatabaseChoice (wx.wizard.PyWizardPage):
+class PageDatabaseChoice (wx_wizard.PyWizardPage):
     def __init__(self,parent):
-        wx.wizard.PyWizardPage.__init__(self,parent)
+        wx_wizard.PyWizardPage.__init__(self,parent)
         self.sizer = wx.BoxSizer(wx.VERTICAL)
         s=_('Please choose a name for your database.\n Check the box if you want to define an encryption password for the database.')
         self.dbFrame = dbGui.CreatorFrame(self)
@@ -113,9 +117,9 @@ class PageDatabaseChoice (wx.wizard.PyWizardPage):
             database.record_current_password(data_psw)
         return True
 
-class PageScannerChoice (wx.wizard.PyWizardPage):
+class PageScannerChoice (wx_wizard.PyWizardPage):
     def __init__(self,parent):
-        wx.wizard.PyWizardPage.__init__(self,parent)
+        wx_wizard.PyWizardPage.__init__(self,parent)
         self.sizer = wx.BoxSizer(wx.VERTICAL)
         
         if os.name == 'posix' :
@@ -139,9 +143,9 @@ class PageScannerChoice (wx.wizard.PyWizardPage):
         s=self.lstScanners.GetStringSelection()
         if s!='' : database.theConfig.set_current_scanner(s)
 
-class PageOCRChoice (wx.wizard.PyWizardPage):
+class PageOCRChoice (wx_wizard.PyWizardPage):
     def __init__(self,parent):
-        wx.wizard.PyWizardPage.__init__(self,parent)
+        wx_wizard.PyWizardPage.__init__(self,parent)
         self.sizer = wx.BoxSizer(wx.VERTICAL)
         self.sizer = wx.GridBagSizer(1,1)
         self.cbAutoOCR = wx.CheckBox(self,-1,_('Automatically proceed to OCR when a new document is added to the database'))
@@ -194,9 +198,9 @@ class PageOCRChoice (wx.wizard.PyWizardPage):
         database.theConfig.set_param('OCR', 'autoStart', str(self.cbAutoOCR.Value),True)
         
 
-class PageSurveyChoice (wx.wizard.PyWizardPage):
+class PageSurveyChoice (wx_wizard.PyWizardPage):
     def __init__(self,parent):
-        wx.wizard.PyWizardPage.__init__(self,parent)
+        wx_wizard.PyWizardPage.__init__(self,parent)
         self.sizer = wx.BoxSizer(wx.VERTICAL)
         self.SetSizer(self.sizer)
         self.dirSurveySizer = wx.GridBagSizer(1,1)
@@ -209,7 +213,7 @@ class PageSurveyChoice (wx.wizard.PyWizardPage):
         self.dirSurveySizer.Add(self.btAddDir,(0,1),flag=wx.ALL)
         self.dirSurveySizer.Add(self.btRemDir,(0,2),flag=wx.ALL)
         self.dirSurveySizer.Add(wx.StaticText(self,-1,_("(check directories which have to be recursively surveyed)")) , (1,0),span=(1,3),flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL )
-        self.dirSurveySizer.Add(self.lstSurveyDirs,(2,0),span=(1,4),flag=wx.ALL | wx.EXPAND | wx.ALIGN_BOTTOM)
+        self.dirSurveySizer.Add(self.lstSurveyDirs,(2,0),span=(1,4),flag=wx.ALL | wx.EXPAND)
         self.dirSurveySizer.Add(wx.StaticText(self,-1,_("Survey extensions") ),(3,0),flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL)
         self.dirSurveySizer.Add(self.txtSurveyExt,(3,1),span=(1,3),flag=wx.EXPAND|wx.ALL)
 
@@ -244,9 +248,9 @@ class PageSurveyChoice (wx.wizard.PyWizardPage):
     def GetPrev(self):
         return self.Parent.pageOCR
 
-class PageFoldersChoice (wx.wizard.PyWizardPage):
+class PageFoldersChoice (wx_wizard.PyWizardPage):
     def __init__(self,parent):
-        wx.wizard.PyWizardPage.__init__(self,parent)
+        wx_wizard.PyWizardPage.__init__(self,parent)
         self.sizer = wx.BoxSizer(wx.VERTICAL)
         self.vFold = virtualFolder.FolderView(self,False,True)
         self.sizer.Add(self.vFold,1,flag=wx.ALL|wx.EXPAND)

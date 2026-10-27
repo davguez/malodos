@@ -210,11 +210,11 @@ class ScanWindow(wx.Dialog):
 		#self.upPart.Add(self.btSave,0,wx.EXPAND | wx.CENTER)
 		#self.upPart.Add(self.btOptions,0,wx.EXPAND | wx.CENTER)
 		#self.upPart.Add(self.cbMultiplePage,0,wx.EXPAND | wx.CENTER)
-		self.upPart.Add(self.buttonPart,(1,0),span=(1,2),flag=wx.ALIGN_TOP|wx.EXPAND)
+		self.upPart.Add(self.buttonPart,(1,0),span=(1,2),flag=wx.EXPAND)
 	
-		self.totalWin.Add(self.upPart,0,wx.ALIGN_TOP|wx.EXPAND)
+		self.totalWin.Add(self.upPart,0,wx.EXPAND)
 		self.totalWin.Add(self.recordPart,0,wx.EXPAND)
-		self.totalWin.Add(self.docWin,1,wx.ALIGN_BOTTOM|wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
+		self.totalWin.Add(self.docWin,1,wx.EXPAND)
 		# BINDING EVENTS
 		self.Bind(wx.EVT_BUTTON, self.actionChooseSource, self.btSource)
 		self.Bind(wx.EVT_BUTTON, self.actionPerformScan, self.btScan)

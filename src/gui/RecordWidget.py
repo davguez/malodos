@@ -8,6 +8,11 @@ attached to this project (LICENSE.txt file)
 GUI part to show/modify a record data
 '''
 import wx
+import ast
+try:
+    import wx.adv as wx_adv
+except ImportError:
+    wx_adv = wx
 from  .TextCtrlAutoComplete import TextCtrlAutoComplete
 import database
 import datetime
@@ -28,6 +33,21 @@ import algorithms.stringFunctions
 
 
 class RecordWidget(wx.Window):
+    @staticmethod
+    def _normalize_filename(value):
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            return value.decode('utf-8', 'replace')
+        if isinstance(value, str) and value.startswith(("b'", 'b\"')):
+            try:
+                parsed = ast.literal_eval(value)
+                if isinstance(parsed, bytes):
+                    return parsed.decode('utf-8', 'replace')
+            except Exception:
+                pass
+        return value
+
     def __init__(self,parent,filename='',file_style = wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST | wx.FLP_USE_TEXTCTRL):
         '''
         Constructor
@@ -72,7 +92,7 @@ class RecordWidget(wx.Window):
         self.txtFieldSizer.Add(self.lbTags,1,wx.EXPAND)
         
         self.txtDate = wx.StaticText(self.panel , -1 , _('document date'))
-        self.lbDate = wx.DatePickerCtrl(self.panel , -1,style=wx.DP_DROPDOWN)
+        self.lbDate = wx_adv.DatePickerCtrl(self.panel , -1,style=wx_adv.DP_DROPDOWN)
         self.txtFieldSizer.Add(self.txtDate,0)
         self.txtFieldSizer.Add(self.lbDate,1)
               
@@ -99,7 +119,7 @@ class RecordWidget(wx.Window):
         self.Bind(wx.EVT_SIZE,self.onResize)
         self.lbTitle.Bind(wx.EVT_TEXT,self.notifyModification)
         self.lbDescription.Bind(wx.EVT_TEXT,self.notifyModification)
-        self.lbDate.Bind(wx.EVT_DATE_CHANGED,self.notifyModification)
+        self.lbDate.Bind(wx_adv.EVT_DATE_CHANGED,self.notifyModification)
         self.lbFileName.Bind(wx.EVT_FILEPICKER_CHANGED,self.notifyModification)
         self.lbFolders.Bind(wx.EVT_LIST_DELETE_ITEM,self.notifyModification)
         self.lbFolders.Bind(wx.EVT_LIST_INSERT_ITEM,self.notifyModification)
@@ -140,7 +160,7 @@ class RecordWidget(wx.Window):
         if text[pos]==',' : return ''
         [pos1,_] = self.getCurrentPart(pos,text)
         if pos1<0 or pos1>=len(text)-1: pos1=0
-        if text[pos1]==',' and pos1+1 < text : pos1=pos1+1
+        if text[pos1]==',' and pos1+1 < len(text) : pos1=pos1+1
         return text[pos1:pos]
     def changeWorkingString(self,newText):
         text = self.lbTags.Value
@@ -199,6 +219,7 @@ class RecordWidget(wx.Window):
         return self.row
     def SetFields(self,filename=None,title=None,description=None,date=None,tags=None,doOCR=None,selectedList=None):
         self.notifyModification()
+        filename = self._normalize_filename(filename)
         if not filename is None: self.lbFileName.SetPath(filename)
         if not title is None : self.lbTitle.SetValue(title)
         if not description is None : self.lbDescription.SetValue(description)
@@ -216,7 +237,7 @@ class RecordWidget(wx.Window):
         if not selectedList is None :
             self.vFold.setSelectedList(selectedList)
             self.updateSelection(selectedList)
-        if algorithms.stringFunctions.is_encrypted(filename) :
+        if filename and os.path.exists(filename) and algorithms.stringFunctions.is_encrypted(filename) :
             self.btEncryptDecrypt.SetLabel(_('Remove password'))
         else:
             self.btEncryptDecrypt.SetLabel(_('Add password'))

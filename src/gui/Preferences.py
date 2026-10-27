@@ -221,7 +221,7 @@ class PrefSurveyDir(wx.NotebookPage):
         self.dirSurveySizer.Add(self.btAddDir,(0,1),flag=wx.ALL)
         self.dirSurveySizer.Add(self.btRemDir,(0,2),flag=wx.ALL)
         self.dirSurveySizer.Add(wx.StaticText(self.panel,-1,_("(check directories which have to be recursively surveyed)")) , (1,0),span=(1,3),flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL )
-        self.dirSurveySizer.Add(self.lstSurveyDirs,(2,0),span=(1,4),flag=wx.ALL | wx.EXPAND | wx.ALIGN_BOTTOM)
+        self.dirSurveySizer.Add(self.lstSurveyDirs,(2,0),span=(1,4),flag=wx.ALL | wx.EXPAND)
         self.dirSurveySizer.Add(wx.StaticText(self.panel,-1,_("Survey extensions") ),(3,0),flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL)
         self.dirSurveySizer.Add(self.txtSurveyExt,(3,1),span=(1,3),flag=wx.EXPAND|wx.ALL)
 

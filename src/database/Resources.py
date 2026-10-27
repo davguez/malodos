@@ -30,7 +30,7 @@ def read_resource_file():
     except:
         resource_file = os.path.join(get_resource_dir(),'resources.ini')
     if os.path.exists(resource_file) :
-        resourceContent = configparser.ConfigParser()
+        resourceContent = configparser.ConfigParser(strict=False)
         resourceContent.read(resource_file)
 
 def get_icon_filename(icon_id):
