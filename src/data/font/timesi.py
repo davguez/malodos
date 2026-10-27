@@ -1,6 +1,6 @@
 # -*- coding: latin1 -*-
 
-from _header import *
+from ._header import *
 
 fpdf_charwidths['timesI']={
   chr(0):250,chr(1):250,chr(2):250,chr(3):250,chr(4):250,chr(5):250,chr(6):250,chr(7):250,chr(8):250,chr(9):250,chr(10):250,chr(11):250,chr(12):250,chr(13):250,chr(14):250,chr(15):250,chr(16):250,chr(17):250,chr(18):250,chr(19):250,chr(20):250,chr(21):250,

@@ -21,6 +21,14 @@ import unicodedata
 ENCRYPT_TEXT='MALODOS encrypted'
 ENCRYPT_IV_LENGTH=16
 
+
+def _to_bytes(value, encoding='utf-8'):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode(encoding)
+    return str(value).encode(encoding)
+
 def char_type(c):
     if c.isspace() : return 0
     if c.isdigit() : return 1
@@ -279,32 +287,33 @@ def req_to_sql(req):
     #print L
     return (SS,LL)
 def no_accent(S):
-    if type(S) is str:
-        S = S.decode('unicode-escape')
-    return unicodedata.normalize('NFKD', S).encode('ASCII', 'ignore')
+    if isinstance(S, bytes):
+        S = S.decode('utf-8', 'ignore')
+    return unicodedata.normalize('NFKD', S).encode('ASCII', 'ignore').decode('ascii')
 
 
 def encrypt(s,cipher,prefixed=True):
+    s = _to_bytes(s)
     npad = (cipher.block_size - (len(s) % cipher.block_size)) % cipher.block_size
     if npad>0:
         if prefixed:
             s=s+urandom(npad)
         else:
-            s=s+' '*npad
+            s=s+b' '*npad
     sss = cipher.encrypt(s)
     if prefixed:
-        x= '%.2d' % npad
+        x= ('%.2d' % npad).encode('ascii')
         sss=x+sss
-    return ''.join( format(ord(i),'02x') for i in sss )
+    return sss.hex()
     #return sss
 def decrypt(s,cipher,prefixed=True,encodeUTF=True):
     try:
         if s is None : return 'internal error'
-        l = [s[i:i+2] for i in range(0,len(s)-1,2)]
-        #l = s.split(',')
-        s=b''.join(chr(int('0x'+i,0)) for i in l)
+        if isinstance(s, bytes):
+            s = s.decode('ascii')
+        s = bytes.fromhex(s)
         if prefixed:
-            npad = int(s[0:2])
+            npad = int(s[0:2].decode('ascii'))
             s = s[2:]
             s = cipher.decrypt(s)
             if npad>0 :
@@ -313,12 +322,9 @@ def decrypt(s,cipher,prefixed=True,encodeUTF=True):
                 ans = s
         else:
             s = cipher.decrypt(s)
-            ans = s.rstrip()
+            ans = s.rstrip(b' ')
         if encodeUTF:
-            try:
-                ans=ans.encode('utf8')
-            except:
-                ans=''
+            ans = ans.decode('utf-8', 'replace')
         return ans
     except Exception as E:
         logging.debug('SQL ERROR ' + str(E))
@@ -327,28 +333,28 @@ def decrypt(s,cipher,prefixed=True,encodeUTF=True):
   
 def save_encrypted_data(txt,filename):
     iv = urandom(ENCRYPT_IV_LENGTH)
-    cipher = AES.new(database.get_current_password(),IV=iv)
+    cipher = AES.new(database.get_current_password(), AES.MODE_CBC, iv=iv)
     
     sss = encrypt(txt,cipher)
     digest = md5.new()
-    digest.update(txt)
+    digest.update(_to_bytes(txt))
     
     with open(filename, "wb") as ff:
-        ff.write(ENCRYPT_TEXT)
+        ff.write(_to_bytes(ENCRYPT_TEXT, 'ascii'))
         ff.write(iv)
         x=digest.digest()
         ff.write(x)
-        ff.write(sss)
+        ff.write(_to_bytes(sss, 'ascii'))
 def is_encrypted(filename):
     with open(filename, "rb") as ff:
         tst = ff.read(len(ENCRYPT_TEXT))
-        return tst == ENCRYPT_TEXT
+        return tst == _to_bytes(ENCRYPT_TEXT, 'ascii')
 def is_good_password(filename,thePassword):
     with open(filename, "rb") as ff:
         iv = ff.read(ENCRYPT_IV_LENGTH)
         dgst = ff.read(16)
         txt = ff.read()
-        cipher = AES.new(thePassword,IV=iv)
+        cipher = AES.new(thePassword, AES.MODE_CBC, iv=iv)
         sss=decrypt(txt,cipher,True,False)
         digest = md5.new()
         digest.update(sss)
@@ -360,14 +366,14 @@ def is_good_password(filename,thePassword):
 def load_encrypted_data(filename):
     with open(filename, "rb") as ff:
         tst = ff.read(len(ENCRYPT_TEXT))
-        if tst == ENCRYPT_TEXT:
+        if tst == _to_bytes(ENCRYPT_TEXT, 'ascii'):
             thePassword = database.get_current_password()
             again=True
             iv = ff.read(ENCRYPT_IV_LENGTH)
             dgst = ff.read(16)
             txt = ff.read()
             while again:
-                cipher = AES.new(thePassword,IV=iv)
+                cipher = AES.new(thePassword, AES.MODE_CBC, iv=iv)
                 sss=decrypt(txt,cipher,True,False)
                 digest = md5.new()
                 digest.update(sss)

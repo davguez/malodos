@@ -8,7 +8,7 @@ attached to this project (LICENSE.txt file)
 GUI part to show/modify a record data
 '''
 import wx
-from  TextCtrlAutoComplete import TextCtrlAutoComplete
+from  .TextCtrlAutoComplete import TextCtrlAutoComplete
 import database
 import datetime
 from data import theData
@@ -244,7 +244,7 @@ class RecordWidget(wx.Window):
                     fullText = imData.get_content()
                 else:
                     fullText = None
-        except Exception,E:
+        except Exception as E:
             logging.debug('Saving record error ' + str(E))
             fullText=None
         if fullText is None or len(fullText)==0 : fullText = {'NOTHING FOUND':1}

@@ -21,7 +21,7 @@ else:
 	from scannerAccess import twainAccess
 import gui.docWindow as docWindow
 import data
-import RecordWidget
+from . import RecordWidget
 import database
 #import wx.lib.intctrl
 #import wx.lib.agw.floatspin
@@ -51,7 +51,7 @@ class OptionsWindow(wx.Dialog):
 			self.txtOpt[k].SetToolTipString(a.name + ' : ' +a.description)
 			self.totalWin.Add(self.txtOpt[k],0,wx.EXPAND)
 			
-			if isinstance(defaultValues,dict) and defaultValues.has_key(self.parName[k]) :
+			if isinstance(defaultValues,dict) and self.parName[k] in defaultValues :
 				defVal = defaultValues[self.parName[k]]
 			else:
 				defVal=None
@@ -236,12 +236,12 @@ class ScanWindow(wx.Dialog):
 		op_ini  =  database.theConfig.get_all_params_in('scanner_options')
 		op_scan = self.scanner.get_options()
 		for op in op_scan :
-			if op.name in op_ini.keys() :
+			if op.name in list(op_ini.keys()) :
 				self.currentOptions[op.name] = str(op_ini[op.name])
 			else:
 				self.currentOptions[op.name] = op.value
-		for name,val in op_ini.items() :
-			if not name in self.currentOptions.keys() : self.currentOptions[name]=val
+		for name,val in list(op_ini.items()) :
+			if not name in list(self.currentOptions.keys()) : self.currentOptions[name]=val
 		#self.recordPart.lbFileName.SetPath(self.defaultNameDir())
 		#data.theData.clear_all()
 		if str_to_bool(database.theConfig.get_param('scanner', 'autoScan','False',True)) :
@@ -328,7 +328,7 @@ class ScanWindow(wx.Dialog):
 				wx.MessageBox(_('Unable to add the file to the disk'))
 				return
 				
-		except Exception,E:
+		except Exception as E:
 			logging.debug('Unable to save the file ' + fname + ':' + str(E))
 			return
 		if not self.recordPart.do_save_record():

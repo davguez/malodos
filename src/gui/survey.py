@@ -9,8 +9,8 @@ GUI dialog for documents survey
 '''
 
 import wx
-import docWindow
-import RecordWidget
+from . import docWindow
+from . import RecordWidget
 import database
 import os.path
 import data
@@ -34,7 +34,7 @@ class SurveyWindow(wx.Dialog):
             self.baseWin=baseWin
             self.panel = wx.Panel(self, -1)
         def populate(self):
-            raise "populate method must be implemented"
+            raise NotImplementedError("populate method must be implemented")
         #self.prefSizer.Add(self.tabFrame,(1,0),span=(1,3),flag=wx.EXPAND|wx.ALL)
 # ******************************************
 # ****    tab for files not in DB       ****
@@ -54,7 +54,7 @@ class SurveyWindow(wx.Dialog):
             rootItem = None
             def append_dir(rootDir,dr,file_list):
                 cur = database.theBase.get_files_under(dr)
-                presents = set( (os.path.basename(unicode(row[0])) for row in cur ) )
+                presents = set( (os.path.basename(str(row[0])) for row in cur ) )
                 dir_list = set(f for f in file_list if os.path.isdir(os.path.join(dr,f)))
                 file_list = set(f for f in file_list if not os.path.isdir(os.path.join(dr,f)) and os.path.splitext(f)[1].lower() in accepted_ext)
                 file_list = file_list - presents
@@ -89,15 +89,16 @@ class SurveyWindow(wx.Dialog):
             rootItem = self.docList.AddRoot(_('Files not in the database'),data=wx.TreeItemData("root"))
             (dir_list,recursiveIdx) = database.theConfig.get_survey_directory_list()
             for i in range(len(dir_list)):
-                dname = dir_list[i].decode('utf8')
+                dname = dir_list[i]
                 if i in recursiveIdx:
                     try:
-                        os.path.walk(dname,append_dir, dname )
+                        for walk_root, __dirs, files in os.walk(dname):
+                            append_dir(dname, walk_root, files)
                     except Exception as E:
                         logging.exception('Problem to survey path:'+dname+"=>"+str(E))
                         continue
                 else:
-                    append_dir(dname, dir_list[i].decode('utf8'), os.listdir(dir_list[i]))
+                    append_dir(dname, dir_list[i], os.listdir(dir_list[i]))
             self.docList.ExpandAll()
         def actionDocSelect(self,event):
             sel = self.docList.GetSelection()
@@ -169,7 +170,7 @@ class SurveyWindow(wx.Dialog):
         def action_OCR_for_selection(self,event):
             self.do_OCR_for(self.docList.GetSelections())
         def action_OCR_for_all(self,event):
-            self.do_OCR_for(range(self.docList.GetCount()))
+            self.do_OCR_for(list(range(self.docList.GetCount())))
         def do_OCR_for(self,selection):
             pd = gui.utilities.getGlobalProgressDialog(_('Character recognition'), '')
             pd.clear()
@@ -247,12 +248,12 @@ class SurveyWindow(wx.Dialog):
         def actionFixSelection(self,event):
             self.doFixFor(self.docList.GetSelections())
         def actionFixAll(self,event):
-            self.doFixFor(range(self.docList.GetCount()))
+            self.doFixFor(list(range(self.docList.GetCount())))
         def tryToFind(self,filename,md5_cs):
             #return None
             (dir_list,recursiveIdx) = database.theConfig.get_survey_directory_list()
             for i in range(len(dir_list)):
-                dname = dir_list[i].decode('utf8')
+                dname = dir_list[i]
                 if i in recursiveIdx:
                     L=[]
                     LL = os.walk(dname)
@@ -373,12 +374,12 @@ class SurveyWindow(wx.Dialog):
         def actionFixSelection(self,event):
             self.doFixFor(self.docList.GetSelections())
         def actionFixAll(self,event):
-            self.doFixFor(range(self.docList.GetCount()))
+            self.doFixFor(list(range(self.docList.GetCount())))
         def tryToFind(self,filename,md5_cs):
             #return None
             (dir_list,recursiveIdx) = database.theConfig.get_survey_directory_list()
             for i in range(len(dir_list)):
-                dname = dir_list[i].decode('utf8')
+                dname = dir_list[i]
                 if i in recursiveIdx:
                     L=[]
                     LL = os.walk(dname)

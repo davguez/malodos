@@ -4,7 +4,7 @@
 import os
 import copy
 
-from font import fpdf_charwidths
+from .font import fpdf_charwidths
 
 FPDF_VERSION = '1.53'
 true = True
@@ -32,7 +32,7 @@ def str_replace(i_from,i_to,i_string):
 	return str(i_string).replace(str(i_from),str(i_to) )
 
 def is_string(i_string):
-	if type(i_string) in [type(""),type(u'')]:
+	if type(i_string) in [type(""),type('')]:
 		return True
 	return False
 
@@ -474,7 +474,7 @@ class FPDF:
 	
 	def Error(self,msg):
 		#Fatal error
-		print 'FPDF error: %s' % msg;
+		print('FPDF error: %s' % msg);
 		1/0
 		return
 	
@@ -1554,7 +1554,7 @@ class FPDF:
 		
 		#while(list(file,info)=each(self.images))
 		for i in range( len( self.images) ):
-			file = self.images.keys()[i]
+			file = list(self.images.keys())[i]
 			info = self.images[file]
 			self._newobj();
 			self.images[file]['n']=self.n;
@@ -1619,7 +1619,7 @@ class FPDF:
 		self._out('/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]');
 		self._out('/Font <<');
 		
-		for font in self.fonts.values():
+		for font in list(self.fonts.values()):
 			self._out('/F'+str(font['i'])+' '+str(font['n'])+' 0 R');
 			
 		self._out('>>');
@@ -1803,7 +1803,7 @@ class FPDF:
 			self.Error('Not a JPEG file: '.file)
 			
 		#if(!isset(a['channels']) || a['channels']==3)
-		if (not a.has_key('channels')) or (a['channels']==3) :
+		if ('channels' not in a) or (a['channels']==3) :
 			colspace='DeviceRGB'
 		elif (a['channels']==4) :
 			colspace='DeviceCMYK'
@@ -1811,7 +1811,7 @@ class FPDF:
 			colspace='DeviceGray'
 				
 		#bpc = isset(a['bits']) ? a['bits'] : 8;
-		if a.has_key('bits') :
+		if 'bits' in a :
 			bpc = a['bits']
 		else :
 			bpc = 8

@@ -1,5 +1,27 @@
 INSTALL file : describe the installation steps for the malodos software.
 
+2026 Python 3 modernization note
+================================
+
+MALODOS now runs on Python 3.13+.
+
+Recommended environment (conda):
+
+1. Create and activate environment
+   conda create -n malodos python=3.13 -y
+   conda activate malodos
+
+2. Install runtime dependencies
+   python -m pip install Pillow wxPython pyenchant bcrypt pycryptodome pypdfium2
+
+3. Run the application
+   python src/homeDocs.py
+
+PDF rendering note:
+- Legacy SWFTools/gfx support is still attempted when available.
+- A modern fallback renderer (pypdfium2) is supported and recommended.
+- You no longer need to copy SWFTools python binaries manually when pypdfium2 is installed.
+
 Being written in python, MALODOS doesn't require any compilation.However, the program is built on top of several libraries
 which have to be installed in order to get MALODOS working.
 

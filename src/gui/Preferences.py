@@ -12,8 +12,8 @@ GUI dialog to define general user preferences
 import wx
 import database
 import os
-import scanWindow
-import startupWizard
+from . import scanWindow
+from . import startupWizard
 if os.name == 'posix' :
     from scannerAccess import saneAccess
 else:
@@ -23,8 +23,8 @@ from database import theConfig
 import os.path
 from algorithms.general import str_to_bool
 from algorithms.words import get_available_languages
-import virtualFolder
-import dbGui
+from . import virtualFolder
+from . import dbGui
 
 class PrefEncrypt(wx.NotebookPage):
     def __init__(self,parent,page_id,name):
@@ -164,7 +164,7 @@ class PrefScanner(wx.NotebookPage):
         if  w.definedParams : self.currentOptions = w.definedParams
     def save_scanner_options(self):
         if not self.currentOptions : return
-        for k,v in self.currentOptions.items() :
+        for k,v in list(self.currentOptions.items()) :
             database.theConfig.set_param('scanner_options', k, v)
     def load_scanner_options(self):
         try:
@@ -172,12 +172,12 @@ class PrefScanner(wx.NotebookPage):
             op_ini  =  database.theConfig.get_all_params_in('scanner_options')
             op_scan = self.scanner.get_options()
             for op in op_scan :
-                if op.name in op_ini.keys() :
+                if op.name in list(op_ini.keys()) :
                     self.currentOptions[op.name] = str(op_ini[op.name])
                 else:
                     self.currentOptions[op.name] = op.value
-            for name,val in op_ini.items() :
-                if not name in self.currentOptions.keys() : self.currentOptions[name]=val
+            for name,val in list(op_ini.items()) :
+                if not name in list(self.currentOptions.keys()) : self.currentOptions[name]=val
             #self.currentOptions = database.theConfig.get_all_params_in('scanner_options')
         except:
             self.currentOptions = None

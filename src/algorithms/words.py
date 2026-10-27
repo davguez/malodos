@@ -21,7 +21,7 @@ try:
 except:
     pass
 import gui.utilities
-from general import str_to_bool
+from .general import str_to_bool
 from PIL import ImageFilter
 from PIL import ImageOps
 #===========================================================================
@@ -32,85 +32,85 @@ from PIL import ImageOps
 def phonex(word):
     word = word.lower()
     # remove eventual trailing ent, t, s  
-    word = re.sub(u'ents$', '',word)
-    word = re.sub(u'ent$', '',word)
-    word = re.sub(u's$', '',word)
-    word = re.sub(u't$', '',word)
-    word = re.sub(u'x$', '',word)
-    word = re.sub(u'es$', '',word)
-    word = re.sub(u'e$', '',word)
+    word = re.sub('ents$', '',word)
+    word = re.sub('ent$', '',word)
+    word = re.sub('s$', '',word)
+    word = re.sub('t$', '',word)
+    word = re.sub('x$', '',word)
+    word = re.sub('es$', '',word)
+    word = re.sub('e$', '',word)
     # replace eu eux by 1
-    word = word.replace(u'eux', '1')
-    word = word.replace(u'eu', '1')
+    word = word.replace('eux', '1')
+    word = word.replace('eu', '1')
     # replace an en by 2
-    word = word.replace(u'ant', '2')
-    word = word.replace(u'ent', '2')
-    word = word.replace(u'an', '2')
-    word = word.replace(u'en', '2')
+    word = word.replace('ant', '2')
+    word = word.replace('ent', '2')
+    word = word.replace('an', '2')
+    word = word.replace('en', '2')
     # replace ou oo by 3
-    word = word.replace(u'ou', '3')
-    word = word.replace(u'oo', '3')
+    word = word.replace('ou', '3')
+    word = word.replace('oo', '3')
     # replace ch sh by 4
-    word = word.replace(u'ch', '4')
-    word = word.replace(u'sh', '4')
+    word = word.replace('ch', '4')
+    word = word.replace('sh', '4')
     # replace û ü, u by "un" sound
-    word = word.replace(u'u', '5')
-    word = word.replace(u'û', '5')
-    word = word.replace(u'ü', '5')
-    word = word.replace(u'ù', '5')
+    word = word.replace('u', '5')
+    word = word.replace('û', '5')
+    word = word.replace('ü', '5')
+    word = word.replace('ù', '5')
     # replace ein ain by 5
-    word = word.replace(u'ain', '5')
-    word = word.replace(u'ein', '5')
-    word = word.replace(u'eim', '5')
-    word = word.replace(u'aim', '5')
-    word = word.replace(u'in', '5')
-    word = word.replace(u'un', '5')
+    word = word.replace('ain', '5')
+    word = word.replace('ein', '5')
+    word = word.replace('eim', '5')
+    word = word.replace('aim', '5')
+    word = word.replace('in', '5')
+    word = word.replace('un', '5')
     # replace à â by a
-    word = word.replace(u'â', 'a')
-    word = word.replace(u'à', 'a')
+    word = word.replace('â', 'a')
+    word = word.replace('à', 'a')
     # replace é, è, er, ez, et, by e
-    word = word.replace(u'é', 'e')
-    word = word.replace(u'è', 'e')
-    word = word.replace(u'ê', 'e')
-    word = word.replace(u'ë', 'e')
-    word = word.replace(u'er', 'e')
-    word = word.replace(u'ez', 'e')
-    word = word.replace(u'et', 'e')
+    word = word.replace('é', 'e')
+    word = word.replace('è', 'e')
+    word = word.replace('ê', 'e')
+    word = word.replace('ë', 'e')
+    word = word.replace('er', 'e')
+    word = word.replace('ez', 'e')
+    word = word.replace('et', 'e')
     # replace ï î by i
-    word = word.replace(u'ï', 'i')
-    word = word.replace(u'î', 'i')
+    word = word.replace('ï', 'i')
+    word = word.replace('î', 'i')
     # replace ö ô by o
-    word = word.replace(u'eau', 'o')
-    word = word.replace(u'au', 'o')
-    word = word.replace(u'ö', 'o')
-    word = word.replace(u'ô', 'o')
+    word = word.replace('eau', 'o')
+    word = word.replace('au', 'o')
+    word = word.replace('ö', 'o')
+    word = word.replace('ô', 'o')
     # replace y by i
-    word = word.replace(u'y', 'i')
+    word = word.replace('y', 'i')
     # replace ç by s
-    word = word.replace(u'ç', 'c')
+    word = word.replace('ç', 'c')
     # replace ca ce ci cy by sa se si sy
-    word = word.replace(u'ca', 'sa')
-    word = word.replace(u'ce', 'se')
-    word = word.replace(u'ci', 'si')
+    word = word.replace('ca', 'sa')
+    word = word.replace('ce', 'se')
+    word = word.replace('ci', 'si')
     # replace c q qu by k
-    word = word.replace(u'c', 'k')
-    word = word.replace(u'que', 'k')
-    word = word.replace(u'qu', 'k')
-    word = word.replace(u'q', 'k')
+    word = word.replace('c', 'k')
+    word = word.replace('que', 'k')
+    word = word.replace('qu', 'k')
+    word = word.replace('q', 'k')
     # replace cc xs ks kc by x
-    word = word.replace(u'cc', 'x')
-    word = word.replace(u'xs', 'x')
-    word = word.replace(u'xc', 'x')
-    word = word.replace(u'ks', 'x')
-    word = word.replace(u'kc', 'x')
+    word = word.replace('cc', 'x')
+    word = word.replace('xs', 'x')
+    word = word.replace('xc', 'x')
+    word = word.replace('ks', 'x')
+    word = word.replace('kc', 'x')
     #replace ph by f
-    word = word.replace(u'ph', 'f')
+    word = word.replace('ph', 'f')
     #replace gn by n
-    word = word.replace(u'gn', 'n')
+    word = word.replace('gn', 'n')
     #replace j by g
-    word = word.replace(u'j', 'g')
+    word = word.replace('j', 'g')
     #remove any leaving h
-    word = word.replace(u'h', '')
+    word = word.replace('h', '')
     # replace doubled letters by single ones
     oldc = '#'
     newr = ''
@@ -140,11 +140,11 @@ def is_accepted_ocr_word(word,dictList,knownTerms):
 def list_to_dict(lst):
     D={}
     for i in lst :
-        if not D.has_key(i) : D[i] =  lst.count(i)
+        if i not in D : D[i] =  lst.count(i)
     return D
 def merge_words(init_dict,added_dict):
-    for w,n in added_dict.items():
-        if not init_dict.has_key(w) or init_dict[w]<n : init_dict[w] = n
+    for w,n in list(added_dict.items()):
+        if w not in init_dict or init_dict[w]<n : init_dict[w] = n
     return init_dict
 def ocr_image_file(image_name,usedOCR):
     outname = tempfile.mktemp('.txt')    
@@ -197,7 +197,7 @@ def ocr_image_file(image_name,usedOCR):
             stepToClose=True
             nlines = len(p)
             for line in p:
-                line_words = [ w for w in [ unicode(ww).lower() for ww in line.split()] if is_accepted_ocr_word(w,dictList,knownTerms)]
+                line_words = [ w for w in [ str(ww).lower() for ww in line.split()] if is_accepted_ocr_word(w,dictList,knownTerms)]
                 ocr_words = ocr_words + line_words
                 pd.add_to_current_step(1.0/nlines)
             outfile.close()
@@ -218,13 +218,13 @@ def ocr_image(pil_image):
     for s in ocrConf.get_available_ocr_programs() :
         if str_to_bool(database.theConfig.get_param('OCR', 'use'+s,'0')) :
             frm = ocrConf.get_needed_image_format(s)
-            if usedOCR.has_key(frm) :
+            if frm in usedOCR :
                 usedOCR[frm].append(s)
             else:
                 usedOCR[frm] = [s]
     nbOCR=0
-    for frm in usedOCR.keys(): nbOCR += len(usedOCR[frm])
-    for frm in usedOCR.keys():
+    for frm in list(usedOCR.keys()): nbOCR += len(usedOCR[frm])
+    for frm in list(usedOCR.keys()):
         img_name = tempfile.mktemp('.'+frm)
         pd.new_sub_step(float(len(usedOCR[frm]))/nbOCR, _('spellchecking'))
         try:

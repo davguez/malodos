@@ -15,8 +15,8 @@ import database
 import wx
 from algorithms.general import str_to_bool
 import os
-import RecordWidget
-import utilities
+from . import RecordWidget
+from . import utilities
 import logging
 
 class FileMerger(wx.Dialog):
@@ -32,7 +32,7 @@ class FileMerger(wx.Dialog):
         '''
         wx.Dialog.__init__(self,parent,style=wx.CLOSE_BOX | wx.SYSTEM_MENU | wx.CAPTION | wx.RESIZE_BORDER | wx.MAXIMIZE_BOX | wx.MINIMIZE_BOX)
         self.rowList = rowList
-        self.docOrder = range(len(rowList))
+        self.docOrder = list(range(len(rowList)))
         self.panel = wx.Panel(self, -1)
         self.totSizer = wx.GridBagSizer(7,5)
         

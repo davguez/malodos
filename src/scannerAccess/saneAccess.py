@@ -64,7 +64,7 @@ class SaneAccess(object):
         if not self.sourceData:
             self.openScanner()
         if not self.sourceData: return
-        for k,v in options.items() :
+        for k,v in list(options.items()) :
             try:
                 if hasattr(self.sourceData,k) and self.sourceData[k].is_settable():
                     if self.sourceData[k].type == sane.TYPE_BOOL:
@@ -76,7 +76,7 @@ class SaneAccess(object):
                     else:
                         self.sourceData.__setattr__(k,v)
             except:
-                print _('Option %s not settable') % k
+                print(_('Option %s not settable') % k)
     def startAcquisition(self,options=None):
         """Begin the acquisition process."""
         if not self.sourceData:
@@ -92,7 +92,7 @@ class SaneAccess(object):
                 cont = True
                 while cont :
                     try:
-                        img = it.next()
+                        img = next(it)
                         data.theData.add_image(img)
                     except:
                         cont=False
@@ -122,7 +122,7 @@ class SaneAccess(object):
         if not self.sourceData:
             self.openScanner()
         if not self.sourceData: return L
-        for k,o in self.sourceData.opt.items() :
+        for k,o in list(self.sourceData.opt.items()) :
             try:
                 if not optName is None and optName.lower() != k.lower() : continue 
                 optValue = self.sourceData.__getattr__(k)

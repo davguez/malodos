@@ -11,7 +11,7 @@ GUI dialog for building a search request
 import wx
 import wx.richtext as rt
 import logging
-import utilities
+from . import utilities
 
 operators=((_('and'),'and'),(_('or'),'or'),(_('or (exclusive)'),'xor'))
 fields=((_('any field'),'any'),(_('title'),'title'),(_('description'),'description'),(_('tags'),'tags'),(_('fulltext'),'fulltext'),(_('document date'),'date'),(_('Registering date'),'RegisterDate'))
@@ -332,7 +332,7 @@ class builderPage(wx.NotebookPage):
             else:
                 levels = [int(v) for v in x[0].split(',')]
             command=x[1]
-        except Exception,E:
+        except Exception as E:
             logging.debug('Request builderPage error ' + str(E))
             return
         

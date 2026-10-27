@@ -7,7 +7,7 @@ attached to this project (LICENSE.txt file)
 =====================================================================
 
 '''
-import imageData
+from . import imageData
 from database import theConfig
 
 theData = imageData.imageData()

@@ -8,29 +8,29 @@ attached to this project (LICENSE.txt file)
 GUI frame of the main application board
 '''
 import wx
-import addFileWindow
-import RecordWidget
-import docWindow
+from . import addFileWindow
+from . import RecordWidget
+from . import docWindow
 import database
 import os
 import subprocess
-import docPrinter
+from . import docPrinter
 from data import theData
-import fileMerge
+from . import fileMerge
 
-import scanWindow
-import survey
+from . import scanWindow
+from . import survey
 from gui import utilities
 import hashlib
 from gui import Preferences
 from database import Resources
 import algorithms.stringFunctions as SF
 import data
-import documentToGo
+from . import documentToGo
 import webbrowser
 import logging
-import requestBuilder
-import startupWizard
+from . import requestBuilder
+from . import startupWizard
 from homeDocs import __version__
 
 class bugReportWindow(wx.Dialog):
@@ -343,7 +343,7 @@ class FolderView(wx.NotebookPage):
                 genealogy = database.theBase.folders_genealogy_of(folderID, False)
                 item = self.trFolders.GetRootItem()
                 for (fID,fName) in genealogy:
-                    if itemDict.has_key(fID):
+                    if fID in itemDict:
                         item = itemDict[fID]
                     else:
                         item = self.trFolders.AppendItem(item,fName)
@@ -655,7 +655,7 @@ class MainFrame(wx.Frame):
                 
     def actionTestOCR(self,event):
         words_dict = data.theData.get_content()
-        for w,n in words_dict.items() : print w + '(' + str(n) + ' fois)'
+        for w,n in list(words_dict.items()) : print(w + '(' + str(n) + ' fois)')
     #===========================================================================
     # click on add scan button
     #===========================================================================
@@ -753,7 +753,7 @@ class MainFrame(wx.Frame):
                 if utilities.ask(_('The file content has changed! Do you wish to update its signature ?')):
                     if not database.theBase.update_doc_signature(docID, file_md5):
                         wx.MessageBox(_('Unable to update the database'))
-        except Exception,E:
+        except Exception as E:
             utilities.show_message(_('Unable to check the file signature...'))
             logging.exception('Error checking MD5 signature ->' + str(E))
         self.recordPart.SetFields(filename, title, description, documentDate,tags,False,folderID_list)

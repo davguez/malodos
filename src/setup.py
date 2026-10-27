@@ -4,13 +4,13 @@ from os import listdir
 from os.path import splitext , split , join , isfile
 
 txt_files = listdir('..')
-for i in txt_files : print join('..',i)
+for i in txt_files : print(join('..',i))
 txt_files = [ join('..',i) for i in txt_files if splitext(i)[1] == '.txt' ]
 
 setup(
     url='http://sites.google.com/site/malodospage/',
     license='GPL v3',
-    install_requires=['PIL','wxpython','pyenchant'],
+    install_requires=['Pillow','wxPython','pyenchant','bcrypt','pycryptodome','pypdfium2'],
     name='MALODOS',
     description='Personal EDM (Scan, describe and manage your personal documents)',
     version='1.3.1',

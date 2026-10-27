@@ -5,7 +5,7 @@
 # originally FPDF for PHP : http://www.fpdf.org
 
 import math
-from fpdf import FPDF
+from .fpdf import FPDF
 
 class PYFPDF(FPDF) :
     def __init__(self):
@@ -17,7 +17,7 @@ class PYFPDF(FPDF) :
         self.toc_current_level = 0
 
     def is_string(self, s):
-        if type(s) in [type(""), type(u'')] :
+        if type(s) in [type(""), type('')] :
             return True
         return False
 
@@ -178,7 +178,7 @@ class PYFPDF(FPDF) :
         elif level == self.toc_current_level :
             self.toc_auto_num[level] += 1
         else :
-            print "self.toc_auto_num=", self.toc_auto_num, "level=", level
+            print("self.toc_auto_num=", self.toc_auto_num, "level=", level)
             self.toc_auto_num = self.toc_auto_num[:level+1]
             self.toc_auto_num[level] += 1
             
@@ -370,7 +370,7 @@ class PYFPDF(FPDF) :
                 ft = d.split("->")
                 #print "ft=", ft
             
-                if tasks_name.has_key(ft[0]) and tasks_name.has_key(ft[1]) :
+                if ft[0] in tasks_name and ft[1] in tasks_name :
                     # draw axis
                     for t in tasks_x :
                         self.SetDrawColor(0, 0, 0) # black

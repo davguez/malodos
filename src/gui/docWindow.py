@@ -208,7 +208,7 @@ class docWindow(wx.Window) :
             displ = [ self.canvasPos[0] + (self.canvasSize[0] - size[0])/2 , self.canvasPos[1] + (self.canvasSize[1] - size[1])/2 ]
             self.canvas.SetPosition(displ)
             self.canvas.SetSize(size)
-            wxbm = wx.BitmapFromBuffer(size[0],size[1],theImage.resize(size,quality).tostring())
+            wxbm = wx.Bitmap.FromBuffer(size[0],size[1],theImage.resize(size,quality).tobytes())
             self.canvas.SetBitmap(wxbm)
         self.canvas.SetEvtHandlerEnabled(True)
     #===========================================================================

@@ -6,7 +6,7 @@ You can use and distribute it freely, but have to conform to the license
 attached to this project (LICENSE.txt file)
 =====================================================================
 '''
-import db
+from . import db
 import logging
 import gui.utilities
 import Crypto.Hash.MD5 as md5
@@ -17,11 +17,12 @@ def set_current_password(pss):
     global currentPassword
     currentPassword=pss
 def transform_password(password):
+    if isinstance(password, str):
+        password = password.encode('utf-8')
     M =md5.new()
     M.update(password)
     S1 = M.digest()
-    x=''
-    for i in range(len(password)-1,-1,-1) : x = x+password[i]
+    x = password[::-1]
     M.update(x)
     S2 = M.digest()
     password = S1+S2
@@ -30,8 +31,8 @@ def record_current_password(pss):
     pss = transform_password(pss)
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(pss, salt)
-    theConfig.set_param('encryption','salt',salt)
-    theConfig.set_param('encryption','hash',hashed)
+    theConfig.set_param('encryption','salt',salt.decode('utf-8'))
+    theConfig.set_param('encryption','hash',hashed.decode('utf-8'))
     theConfig.commit_config()
     set_current_password(pss)
 
@@ -39,8 +40,12 @@ def get_password(msg=_('Please gives your password for data encryption/decryptio
     global currentPassword
     
     if hasattr(checker, '__contains__') and len(checker)==2 and checker[0] is not None and checker[1] is not None:
-        salt=checker[0]
-        hashed=checker[1]
+        salt = checker[0]
+        hashed = checker[1]
+        if isinstance(salt, str):
+            salt = salt.encode('utf-8')
+        if isinstance(hashed, str):
+            hashed = hashed.encode('utf-8')
         def the_checker(pss):
             b = bcrypt.hashpw(pss, salt)
             if b != hashed:
@@ -74,8 +79,8 @@ def get_current_password(msg=_('Please gives your password for data encryption/d
     if psw != '':
         salt = bcrypt.gensalt()
         hashed = bcrypt.hashpw(psw, salt)
-        theConfig.set_param('encryption','salt',salt)
-        theConfig.set_param('encryption','hash',hashed)
+        theConfig.set_param('encryption','salt',salt.decode('utf-8'))
+        theConfig.set_param('encryption','hash',hashed.decode('utf-8'))
         theConfig.commit_config()
     set_current_password(psw)
         

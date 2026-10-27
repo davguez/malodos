@@ -17,13 +17,14 @@ import hashlib
 import string
 import gui.utilities
 import os.path
-import ConfigParser
+import configparser
 import algorithms.words
 from database import Resources
 import shutil
 import zipfile
 import logging
 import re
+import base64
 from os import urandom
 import database
 import Crypto.Cipher.AES as AES
@@ -39,7 +40,7 @@ class ConfigReader(object):
             except:
                 return
             theFile.close()
-        self.config = ConfigParser.SafeConfigParser()
+        self.config = configparser.ConfigParser()
         self.read_config()
 
     def get_param(self,section,key,defaultValue=None,create_if_not_exist=False):
@@ -65,7 +66,7 @@ class ConfigReader(object):
         return dict(self.config.items(section))
     def read_config(self):
         if os.path.exists(self.conf_file) :
-            self.config = ConfigParser.SafeConfigParser()
+            self.config = configparser.ConfigParser()
             self.config.read(self.conf_file)
     def commit_config(self):
             try:
@@ -153,7 +154,7 @@ class Configuration(ConfigReader):
             from win32com.shell import shellcon, shell
             self.conf_dir = shell.SHGetFolderPath(0, shellcon.CSIDL_PERSONAL, 0, 0)
             self.conf_dir = os.path.abspath(os.path.join(self.conf_dir,'..'))
-            self.conf_dir=unicode(self.conf_dir)
+            self.conf_dir=str(self.conf_dir)
         except Exception: # quick semi-nasty fallback for non-windows/win32com case
             #logging.exception(str(EE))
             self.conf_dir = os.path.expanduser("~")
@@ -169,7 +170,7 @@ class Configuration(ConfigReader):
                 os.mkdir(self.conf_dir)
             except Exception as E:
                 logging.exception('Unable to create the folder' + self.conf_dir + '->' + str(E))
-                self.conf_dir = raw_input(_('Choose a folder for the MALODOS configuration and database'))
+                self.conf_dir = input(_('Choose a folder for the MALODOS configuration and database'))
                 if not os.path.isdir(self.conf_dir) :
                     try:
                         os.mkdir(self.conf_dir)
@@ -237,9 +238,9 @@ class Configuration(ConfigReader):
     def set_current_scanner(self,S):
         return self.set_param('scanner', 'source',S)
     def get_database_name(self):
-        return self.get_param('database', 'filename').decode('utf8')
+        return self.get_param('database', 'filename')
     def set_database_name(self,S):
-        return self.set_param('database', 'filename',S.encode('utf8'))
+        return self.set_param('database', 'filename',S)
     def get_resource_filename(self):
         return self.get_param('general', 'resourceFile')
     def get_ocr_confname(self):
@@ -252,7 +253,7 @@ class Configuration(ConfigReader):
         answer = ""
         for i in range(len(dir_list)) :
             if i in checked : answer = answer + '*'
-            answer = answer + dir_list[i].encode('utf8') + '|'
+            answer = answer + dir_list[i] + '|'
         return answer
     def decode_dir_list(self,S):
         items_list = S.split('|')
@@ -265,7 +266,7 @@ class Configuration(ConfigReader):
             if item[0] == '*' :
                 checked.append(len(dir_list))
                 item=item[1:]
-            dir_list.append(item.decode('utf8'))
+            dir_list.append(item)
         return (dir_list , checked)
 
 class Base(object):
@@ -322,7 +323,7 @@ class Base(object):
         if base_name is not None : self.use_base(base_name)
     def utf_or_str(self,s):
         try:
-            d=unicode(s)
+            d=str(s)
         except:
             d=str(s)
         return d
@@ -336,13 +337,13 @@ class Base(object):
             self.iv=urandom(self.ENCRYPT_IV_LENGTH)
             self.salt= bcrypt.gensalt()
             self.hashed=bcrypt.hashpw(psw, self.salt)
-            self.cypher = AES.new(psw,IV=self.iv)
+            self.cypher = AES.new(psw, AES.MODE_CBC, iv=self.iv)
         else:
             self.cypher = None
         self.create_function()
         if self.encrypted:
-            database.theConfig.set_param('encryption','salt',self.salt)
-            database.theConfig.set_param('encryption','hash',self.hashed)
+            database.theConfig.set_param('encryption','salt',self.salt.decode('utf-8'))
+            database.theConfig.set_param('encryption','hash',self.hashed.decode('utf-8'))
             database.theConfig.commit_config()
            
         
@@ -352,11 +353,12 @@ class Base(object):
         self.base_name = base_name
         self.encrypted = algorithms.general.str_to_bool(self.get_parameter(self.param_ENCRYPTED))
         if self.encrypted:
-            self.iv=self.get_parameter(self.param_INI_VECTOR)
-            salt=self.get_parameter(self.param_SALT)
-            hashed=self.get_parameter(self.param_HASHED)
+            iv_b64 = self.get_parameter(self.param_INI_VECTOR)
+            self.iv = base64.b64decode(iv_b64.encode('ascii'))
+            salt = self.get_parameter(self.param_SALT).encode('utf-8')
+            hashed = self.get_parameter(self.param_HASHED).encode('utf-8')
             psw = database.get_password(checker=(salt,hashed))
-            self.cypher = AES.new(psw,IV=self.iv)
+            self.cypher = AES.new(psw, AES.MODE_CBC, iv=self.iv)
         self.create_function()
     def create_function(self):
         if os.name == 'nt' or os.name == 'win32' :
@@ -429,7 +431,7 @@ class Base(object):
         sql_statement = "CREATE INDEX IF NOT EXISTS SOUNDEX ON " + self.keywords_tableName + "(soundex_word)"
         try:
             self.connexion.execute(sql_statement)
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR')
             gui.utilities.show_message('Error during database index creation : ' + str(E))
             
@@ -466,7 +468,7 @@ class Base(object):
         sql_statement += ' WHERE DW.keyID = K.rowID AND DW.docID = D.RowID'
         try:
             self.connexion.execute(sql_statement)
-        except Exception,E:
+        except Exception as E:
             gui.utilities.show_message('Error during database view creation :' + str(E))
             logging.debug('SQL ERROR ' + str(E))
             return False
@@ -491,16 +493,16 @@ class Base(object):
                 os.rename(tmp_name, self.base_name)
                 if not os.path.exists(self.base_name): raise _('unable to upgrade the database')
                 self.use_base(self.base_name)
-            except Exception,E:
+            except Exception as E:
                 logging.debug('SQL ERROR ' + str(E))
                 return False
             
         self.set_parameter(self.param_DB_VERSION, self.DB_VERSION)
         self.set_parameter(self.param_ENCRYPTED, str(self.encrypted))
         if self.encrypted:
-            self.set_parameter(self.param_INI_VECTOR, self.iv)
-            self.set_parameter(self.param_SALT, self.salt)
-            self.set_parameter(self.param_HASHED, self.hashed)
+            self.set_parameter(self.param_INI_VECTOR, base64.b64encode(self.iv).decode('ascii'))
+            self.set_parameter(self.param_SALT, self.salt.decode('utf-8'))
+            self.set_parameter(self.param_HASHED, self.hashed.decode('utf-8'))
         return True
     
     #===========================================================================
@@ -514,7 +516,7 @@ class Base(object):
             self.connexion.execute(Q,(parameter_name,str(parameter_value)))
             self.connexion.commit()
             return True
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return False
     #===========================================================================
@@ -529,7 +531,7 @@ class Base(object):
                 return row[0]
             else:
                 return None
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return None
          
@@ -563,7 +565,7 @@ class Base(object):
                     personID = cur.lastrowid
                 else:
                     personID = row[0]
-            except Exception,E:
+            except Exception as E:
                 gui.utilities.show_message(_('Unable to assign the registering person'))
                 logging.debug('SQL ERROR ' + str(E))
         try:
@@ -572,7 +574,7 @@ class Base(object):
             sql_statement = 'INSERT INTO ' + self.documents_tableName + " (title,description,filename,registerDate,registeringPersonID,documentDate,tags,checksum) VALUES (?,?,?,?,?,?,?,?)"
             cur = self.connexion.execute(sql_statement,(self.encrypt(title),self.encrypt(description),fileName,registeringDate,personID,documentDate,self.encrypt(tags),str(file_md5)))
             docID = cur.lastrowid
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             gui.utilities.show_message(_('Unable to add the document'))
             return False
@@ -643,7 +645,7 @@ class Base(object):
         )'''
         cur = None
         if not keywords : return None
-        keywords =  map(lambda s:algorithms.words.phonex(s) , keywords)
+        keywords =  [algorithms.words.phonex(s) for s in keywords]
         # first : find the keyword in the keywords table
         if isinstance(keywords,list):
             Q = "SELECT ROWID FROM " + self.keywords_tableName + " WHERE decrypt(soundex_word) IN " + self.make_placeholder_list(len(keywords))
@@ -653,7 +655,7 @@ class Base(object):
             #print "finding keys via " + Q
             cur = self.connexion.execute(Q , keywords)
             return cur
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             gui.utilities.show_message(_('Unable to search keywords'))
             return None
@@ -766,7 +768,7 @@ class Base(object):
                 sql_statement += ' WHERE ROWID IN ' + str(rowIDList)
         try:
             cur = self.connexion.execute(sql_statement)
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             gui.utilities.show_message(_('Document search failed'))
             return None
@@ -871,14 +873,14 @@ class Base(object):
             if type(keyGroup[1]) is list:
                 all_keywords = dict([ (item.lower(),keyGroup[1].count(item)) for item in keyGroup[1] ])
             elif type(keyGroup[1]) is dict:
-                all_keywords = dict([ (item.lower(),weight) for item,weight in keyGroup[1].items() ])
-            absents = self.find_absent_keywords(all_keywords.keys())
-            absents = map(lambda x:(self.encrypt(x),self.encrypt(algorithms.words.phonex(x))) , absents)
+                all_keywords = dict([ (item.lower(),weight) for item,weight in list(keyGroup[1].items()) ])
+            absents = self.find_absent_keywords(list(all_keywords.keys()))
+            absents = [(self.encrypt(x),self.encrypt(algorithms.words.phonex(x))) for x in absents]
             if len(absents)>0 :
                 Q = 'INSERT INTO ' + self.keywords_tableName + ' (keyword,soundex_word) VALUES (?,?)'
                 try:
                     self.connexion.executemany(Q,absents)
-                except  Exception,E:
+                except  Exception as E:
                     logging.debug('SQL ERROR ' + str(E))
                     gui.utilities.show_message(_('Unable to insert new keywords : ') + str(E))
                     return False
@@ -886,7 +888,7 @@ class Base(object):
             Q = 'SELECT ROWID,decrypt(KEYWORD) FROM ' + self.keywords_tableName + ' WHERE decrypt(keyword) IN ' + self.make_placeholder_list(len(all_keywords))
             addedKeys = []
             try:
-                cur = self.connexion.execute(Q,all_keywords.keys())
+                cur = self.connexion.execute(Q,list(all_keywords.keys()))
                 addedKeys = [ (row[0],all_keywords[row[1].lower()]) for row in cur]
             except Exception as E:
                 logging.debug('SQL ERROR ' + str(E))
@@ -950,7 +952,7 @@ class Base(object):
         keywords_descr = [i.lower() for i in keywords_descr if len(i)>3 and  p.search(i) is not None]
         
         keywords_tag = string.split(tags , ',')
-        keywords_tag =  map(lambda s:s.lower() , keywords_tag)
+        keywords_tag =  [s.lower() for s in keywords_tag]
         
         if fullText is None:
             return ( ( self.ID_TITLE, keywords_title) , (self.ID_DESCRIPTION , keywords_descr) , (self.ID_TAG ,keywords_tag ) )
@@ -1165,7 +1167,7 @@ class Base(object):
                 cont = (parent != 0)
             genealogy.reverse()
             return genealogy
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return []
     #===========================================================================
@@ -1207,7 +1209,7 @@ class Base(object):
             self.connexion.executemany(Q, params)
             self.connexion.commit()
             return True
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return False
     #===========================================================================
@@ -1225,7 +1227,7 @@ class Base(object):
             self.connexion.execute(Q, params)
             self.connexion.commit()
             return True
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return False
     #===========================================================================
@@ -1243,7 +1245,7 @@ class Base(object):
             #print Q
             cur = self.connexion.execute(Q, params)
             return cur
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return None
     #===========================================================================
@@ -1259,7 +1261,7 @@ class Base(object):
             #print Q
             cur = self.connexion.execute(Q,keys)
             return [row[0] for row in cur]
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             return []
     #===========================================================================
@@ -1356,7 +1358,7 @@ class Base(object):
                             r=list(row)
                             r[self.IDX_FILENAME] = file_replacer(row[self.IDX_FILENAME])
                             if r[self.IDX_FILENAME] is not None and r[self.IDX_FILENAME] != '': newDB.connexion.execute(Q,r)
-                        except Exception,E:
+                        except Exception as E:
                             logging.debug('SQL ERROR ' + str(E))
                         
                 pos=pos2
@@ -1401,7 +1403,7 @@ class Base(object):
             newDB.connexion.commit()
             newDB.connexion.close()
             return True
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))
             gui.utilities.show_message(_('Unable to create the database {name} : {err}'.format(name=new_base_name,err=str(E))))
             return False
@@ -1417,10 +1419,10 @@ class Base(object):
         fileDict = dict()
         for f in [row[self.IDX_FILENAME] for row in rows] :
             arcname = os.path.basename(f)
-            if arcname in fileDict.values():
+            if arcname in list(fileDict.values()):
                 (name,ext) = os.path.splitext(arcname)
                 nn=1
-                while arcname in fileDict.values():
+                while arcname in list(fileDict.values()):
                     nn+=1
                     arcname=name+'_'+str(nn)+ext
             fileDict[f] = arcname
@@ -1448,5 +1450,5 @@ class Base(object):
             Q = "UPDATE %s SET filename=MAKE_FULL_PATH(filename,'%s')" %(self.documents_tableName,dirname)
             self.connexion.execute(Q)
             self.connexion.commit()
-        except Exception,E:
+        except Exception as E:
             logging.debug('SQL ERROR ' + str(E))

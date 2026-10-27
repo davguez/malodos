@@ -70,7 +70,7 @@ class TwainAccess(object):
                 L.append(scannerOption.scannerOption(name='manual_multipage',title=_('Manual multipage'),
                  description=_('Check to manually scan a multiple page document'),
                  scan_type=scannerOption.TYPE_BOOL,value=False))
-        except Exception,E:
+        except Exception as E:
             logging.debug('ERROR ' + str(E))
         return L
     def useOptions(self,options):
@@ -82,7 +82,7 @@ class TwainAccess(object):
         if not self.sourceManager:
             try:
                 self.chooseSource()
-            except Exception,E:
+            except Exception as E:
                 logging.exception('TWAIN : No source ' + str(E))
                 return
         if not self.sourceManager or not self.sourceName:
@@ -107,7 +107,7 @@ class TwainAccess(object):
         try:
             self.sourceData.SetCapability(twain.ICAP_YRESOLUTION, twain.TWTY_FIX32, 100.0)
             self.sourceData.RequestAcquire(1, 1)
-        except Exception,E:
+        except Exception as E:
             logging.exception('TWAIN acquisition error : '+ str(E))
             self.closeScanner()
                 
@@ -153,7 +153,7 @@ class TwainAccess(object):
 #                img = FIPY.Image()
 #                img.load(self.tmpFileName)
 #                data.theData.add_image( img )
-            except Exception,E:
+            except Exception as E:
                 logging.exception('Transfer error : ' + str(E))
                 break
         if handle : twain.GlobalHandleFree(handle)

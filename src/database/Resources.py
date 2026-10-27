@@ -12,7 +12,7 @@ Resource constants and data retrieve
 import sys
 import os.path
 import database
-import ConfigParser
+import configparser
 import logging
 
 resourceContent = None
@@ -30,7 +30,7 @@ def read_resource_file():
     except:
         resource_file = os.path.join(get_resource_dir(),'resources.ini')
     if os.path.exists(resource_file) :
-        resourceContent = ConfigParser.SafeConfigParser()
+        resourceContent = configparser.ConfigParser()
         resourceContent.read(resource_file)
 
 def get_icon_filename(icon_id):
@@ -51,6 +51,6 @@ def get_message(message_id,language=None):
     if not resourceContent.has_section(language) :
         return '' 
     try:
-        return unicode(resourceContent.get(language,message_id,'')) 
+        return str(resourceContent.get(language,message_id,'')) 
     except:
         return ''

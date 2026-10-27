@@ -47,7 +47,7 @@ if not exe_name: exe_name = '.'
 ld = os.path.join(exe_name ,'locale')
 # code bellow copied from http://www.journaldunet.com/developpeur/tutoriel/pyt/070607-python-traduction/2.shtml
 
-gettext.install('malodos', localedir = ld, unicode=True)
+gettext.install('malodos', localedir = ld)
 import database
 choosed_lang = database.theConfig.get_current_language()
 #x=gettext.find("malodos", localedir = ld,languages=['en'])
@@ -60,15 +60,15 @@ try:
         else:
             lang=choosed_lang
             cur_lang = gettext.translation('malodos', localedir=ld, languages=[lang])
-            cur_lang.install(unicode=True)
+            cur_lang.install()
     else :
         if choosed_lang=='sys':
-            gettext.install('malodos', localedir = ld, unicode=True)
+            gettext.install('malodos', localedir = ld)
         else:
             tr = gettext.translation('malodos', localedir = ld, languages=[choosed_lang])
             tr.install()
-except IOError,E:
-    print str(E)
+except IOError as E:
+    print(str(E))
 
 # end of copy part
 
@@ -83,7 +83,7 @@ def print_query_result(sFilter,frmt='%t',date_format='%d-%m-%Y'):
     if docList is None : docList=[]
     docList=[row for row in docList]
     for row in docList:
-        s = unicode(frmt)
+        s = str(frmt)
         docID = row[database.theBase.IDX_ROWID]
         foldList = database.theBase.folders_list_for(docID)
         folderStringList=[]
@@ -120,7 +120,7 @@ def print_query_result(sFilter,frmt='%t',date_format='%d-%m-%Y'):
             s = s.replace('%f',row[database.theBase.IDX_FILENAME])
         except Exception as E:
             logging.exception('Problem in query format : ' + str(E))
-        print s.encode('utf8','replace')
+        print(s)
 
 def start_gui():
     import wx
@@ -150,9 +150,9 @@ if __name__ == "__main__":
     logging.info('Starting MALODOS')
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hvd:q:a:f:F:", ["help","version","database=","format=","add=","dateFormat=","title=",'description=','tags=','folders=','date='])
-    except getopt.error, msg:
-        print msg
-        print "for help use --help"
+    except getopt.error as msg:
+        print(msg)
+        print("for help use --help")
         sys.exit(2)
     # process options
     query_format='%t'
@@ -166,10 +166,10 @@ if __name__ == "__main__":
     addFile=None
     for o, a in opts:
         if o in ("-h", "--help"):
-            print __doc__
+            print(__doc__)
             sys.exit(0)
         if o in ('-v','--version'):
-            print __version__
+            print(__version__)
             sys.exit(0)
         if o in ('-d','--database'): database.theBase.use_base(a)
         if o in ('-f','--format'): query_format=a

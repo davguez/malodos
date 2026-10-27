@@ -10,7 +10,7 @@ view / select / edit virtual folders
 '''
 import wx
 import database
-import utilities
+from . import utilities
 
 
 class FolderView (wx.Panel):

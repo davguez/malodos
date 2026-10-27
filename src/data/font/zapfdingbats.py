@@ -1,6 +1,6 @@
 # -*- coding: latin1 -*-
 
-from _header import *
+from ._header import *
 
 fpdf_charwidths['zapfdingbats']={
   chr(0):0,chr(1):0,chr(2):0,chr(3):0,chr(4):0,chr(5):0,chr(6):0,chr(7):0,chr(8):0,chr(9):0,chr(10):0,chr(11):0,chr(12):0,chr(13):0,chr(14):0,chr(15):0,chr(16):0,chr(17):0,chr(18):0,chr(19):0,chr(20):0,chr(21):0,

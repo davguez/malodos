@@ -17,11 +17,16 @@ from PIL import Image , ImageSequence
 try:
     import gfx
 except:
-    pass
+    gfx = None
+
+try:
+    import pypdfium2 as pdfium
+except:
+    pdfium = None
 
 
 import wx
-from fpdf import FPDF
+from .fpdf import FPDF
 import tempfile
 #import sys
 import os.path
@@ -178,7 +183,7 @@ class imageData(object):
                     return True
                     
                 except Exception as E:
-                    print str(E)
+                    print(str(E))
                     gui.utilities.show_message(_('Unable to save multipage tiff document for the time being'))
                     return False
             try:
@@ -223,7 +228,7 @@ class imageData(object):
             doc.Output(filename)
             for f in list_files : os.remove(f)
             return True
-        except Exception,E:
+        except Exception as E:
             logging.debug('Saving file ' + str(E))
             return False
     def get_content(self,newProgression=True):
@@ -267,14 +272,14 @@ class imageData(object):
                 if page>=nmax:return
                 R = [page]
             else :
-                R = range(nmax)
+                R = list(range(nmax))
             progressor = gui.utilities.ProgressDialog('MALODOS',_('Reading image data, please wait...'))
             for idx in R:
                 try:
                     progressor.add_to_current_step(1.0/nmax)
                     wxi = wx.Image(filename,index=idx)
                     img = Image.new('RGB', (wxi.GetWidth(), wxi.GetHeight()))
-                    img.fromstring(wxi.GetData())
+                    img.frombytes(wxi.GetData())
                     self.nb_pages = nmax
                     self.add_image(img)
                     try_pdf=False
@@ -290,30 +295,49 @@ class imageData(object):
         # This is executed only is try_pdf is TRUE --> loading file was not possible via wx
         progressor = gui.utilities.ProgressDialog('MALODOS',_('Reading image data, please wait...'))
         try:
-            import locale
-            l = locale.getdefaultlocale()
-            doc = gfx.open("pdf", filename.encode(l[1]))
-            #doc = gfx.open("pdf", filename)
-            self.title=doc.getInfo("title")
-            self.subject=doc.getInfo("subject")
-            self.keywords=doc.getInfo("keywords")
-            nmax = doc.pages
-            if page:
-                if page>=nmax:
-                    progressor.destroy()
-                    return
-                R = [page]
-            else :
-                R = range(nmax)
-            for pagenr in range(nmax):
-                progressor.add_to_current_step(1.0/nmax)
-                page = doc.getPage(pagenr+1)
-                bm = page.asImage(page.width,page.height)
-                I = Image.fromstring("RGB",(page.width,page.height),bm)
-                self.nb_pages = nmax
-                self.add_image(I)
-            self.current_image=0
-        except Exception,E:
+            if gfx is not None:
+                import locale
+                l = locale.getdefaultlocale()
+                encoding = l[1] or 'utf-8'
+                doc = gfx.open("pdf", filename.encode(encoding))
+                self.title=doc.getInfo("title")
+                self.subject=doc.getInfo("subject")
+                self.keywords=doc.getInfo("keywords")
+                nmax = doc.pages
+                if page:
+                    if page>=nmax:
+                        progressor.destroy()
+                        return
+                    R = [page]
+                else :
+                    R = list(range(nmax))
+                for pagenr in R:
+                    progressor.add_to_current_step(1.0/nmax)
+                    pdf_page = doc.getPage(pagenr+1)
+                    bm = pdf_page.asImage(pdf_page.width,pdf_page.height)
+                    I = Image.frombytes("RGB",(pdf_page.width,pdf_page.height),bm)
+                    self.nb_pages = nmax
+                    self.add_image(I)
+                self.current_image=0
+            elif pdfium is not None:
+                pdf = pdfium.PdfDocument(filename)
+                nmax = len(pdf)
+                if page is not None:
+                    if page >= nmax:
+                        progressor.destroy()
+                        return
+                    R = [page]
+                else:
+                    R = list(range(nmax))
+                for pagenr in R:
+                    progressor.add_to_current_step(1.0 / max(1, nmax))
+                    bitmap = pdf[pagenr].render(scale=2).to_pil()
+                    self.nb_pages = nmax
+                    self.add_image(bitmap.convert('RGB'))
+                self.current_image = 0
+            else:
+                raise RuntimeError('Neither swftools (gfx) nor pypdfium2 is available for PDF rendering')
+        except Exception as E:
             logging.exception("Unable to open the file " + str(filename) + " because " + str(E))
         finally:
             progressor.destroy()

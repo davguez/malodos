@@ -9,11 +9,11 @@ class related to the document to go wizard
 '''
 
 import wx.wizard
-import dbGui
-import utilities
+from . import dbGui
+from . import utilities
 import os
 import database
-import virtualFolder
+from . import virtualFolder
 if os.name == 'posix' :
     from scannerAccess import saneAccess
 else:

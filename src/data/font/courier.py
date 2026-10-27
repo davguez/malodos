@@ -1,6 +1,6 @@
 # -*- coding: latin1 -*-
 
-from _header import *
+from ._header import *
 
 fpdf_charwidths['courier']={}
 

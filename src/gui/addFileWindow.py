@@ -9,10 +9,10 @@ GUI dialog for addition of a file into the database
 '''
 import wx
 import os
-import RecordWidget
+from . import RecordWidget
 from database import theConfig
 from algorithms.general import str_to_bool
-import docWindow
+from . import docWindow
 import data
 
 class AddFileWindow(wx.Dialog):

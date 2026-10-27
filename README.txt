@@ -15,14 +15,17 @@ The libraries onto which it is built are essentially:
 - pysqlite3 (and thus sqlite, for database management)
 - twain (for scanner access under windows)
 - sane (for scanner access under linux)
-- PIL
+- Pillow
 - wxpython (and thus wxwidgets) for the GUI
-- swftools (for pdf reading)
+- swftools (legacy option for pdf reading)
+- pypdfium2 (modern fallback for pdf reading)
 - pypdf (for pdf creation)
+- pycryptodome and bcrypt (encryption/password handling)
 
 The icons are taken from this website : http://icones.pro
 
 This project is hosted on google code at the following address and can be downloaded from there:
 http://code.google.com/p/malodos/downloads/detail?name=homeDoc-0.1.zip&can=2&q=
 
-
+Python compatibility:
+- Current target runtime: Python 3.13 and above.

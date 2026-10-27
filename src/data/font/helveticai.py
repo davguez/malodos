@@ -1,6 +1,6 @@
 # -*- coding: latin1 -*-
 
-from _header import *
+from ._header import *
 
 fpdf_charwidths['helveticaI']={
   chr(0):278,chr(1):278,chr(2):278,chr(3):278,chr(4):278,chr(5):278,chr(6):278,chr(7):278,chr(8):278,chr(9):278,chr(10):278,chr(11):278,chr(12):278,chr(13):278,chr(14):278,chr(15):278,chr(16):278,chr(17):278,chr(18):278,chr(19):278,chr(20):278,chr(21):278,

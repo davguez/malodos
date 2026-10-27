@@ -105,7 +105,7 @@ def getGlobalProgressDialog(title='Progression',message=None):
         except:
             gProgressDialog = None
     if gProgressDialog is None:
-        raise "Unable to create progress dialog"
+        raise RuntimeError("Unable to create progress dialog")
     return gProgressDialog
 def closeGlobalProgressDialog():
     global gProgressDialog

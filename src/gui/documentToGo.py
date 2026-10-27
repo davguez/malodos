@@ -10,7 +10,7 @@ class related to the document to go wizard
 
 import wx.wizard
 import database
-import utilities
+from . import utilities
 import os.path
 class DocToGoWizard (wx.wizard.Wizard):
     selectBasket=False
@@ -30,9 +30,9 @@ class DocToGoWizard (wx.wizard.Wizard):
         if not utilities.ask(_('Are you sure you want to cancel the document to go wizard ?')) : event.Veto()
     def on_finished(self,event):
         sel = self.page_chooser.rbContent.GetSelection()
-        sel = self.page_chooser.choice_list.keys()[sel]
+        sel = list(self.page_chooser.choice_list.keys())[sel]
         what = self.page_chooser.rbDocToSave.GetSelection()
-        what =  self.page_chooser.sel_list.keys()[what]
+        what =  list(self.page_chooser.sel_list.keys())[what]
         if what==self.page_chooser.ALL_DOCUMENTS:
             cur = database.theBase.find_sql()
             if cur is None :
@@ -103,12 +103,12 @@ class PageActionChooser (wx.wizard.PyWizardPage):
         self.choice_list = { self.EXPORT_DATABASE:_('Export all of part of the database.') ,
                              self.EXPORT_ARCHIVE :_('Create an archive with some or all of your documents, along with a database to browse into.'),
                              self.IMPORT_ARCHIVE :_('Open an existing archive.')   }
-        self.rbContent =  wx.RadioBox(self,label=_('What action do you want to take'),choices=self.choice_list.values(),style=wx.RA_VERTICAL)
+        self.rbContent =  wx.RadioBox(self,label=_('What action do you want to take'),choices=list(self.choice_list.values()),style=wx.RA_VERTICAL)
         self.sel_list = { self.ALL_DOCUMENTS:_('Export all the documents') ,
                              self.FILTER_RESULT :_('Export only the result of the current search.'),
                              self.SELECTED_DOCS :_('Export only the result of the current selection.'),
                              self.BASKET_DOCS :_('Export all the documents in the basket')    }
-        self.rbDocToSave =  wx.RadioBox(self,label=_('Which documents would you like to save'),choices=self.sel_list.values(),style=wx.RA_VERTICAL)
+        self.rbDocToSave =  wx.RadioBox(self,label=_('Which documents would you like to save'),choices=list(self.sel_list.values()),style=wx.RA_VERTICAL)
         if self.Parent.selectBasket :
             self.rbDocToSave.SetSelection(3)
         self.sizer.Add(self.rbContent,0,flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
@@ -117,7 +117,7 @@ class PageActionChooser (wx.wizard.PyWizardPage):
         self.Bind(wx.EVT_RADIOBOX, self.on_choose_content , self.rbContent)
     def on_choose_content(self,event):
         sel = self.rbContent.GetSelection()
-        sel = self.choice_list.keys()[sel]
+        sel = list(self.choice_list.keys())[sel]
         if sel == self.EXPORT_DATABASE or sel==self.EXPORT_ARCHIVE:
             self.rbDocToSave.Show()
         else:
@@ -125,7 +125,7 @@ class PageActionChooser (wx.wizard.PyWizardPage):
         
     def GetNext(self):
         sel = self.rbContent.GetSelection()
-        sel = self.choice_list.keys()[sel]
+        sel = list(self.choice_list.keys())[sel]
         if sel == self.EXPORT_DATABASE:
             return self.Parent.page_database_export
         elif sel==self.EXPORT_ARCHIVE:
